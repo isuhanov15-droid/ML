@@ -1,0 +1,20 @@
+1. Отработать стоп.
+2. Сделать универсальной библиотеку.
+3. Выбор примеров.
+4. Матричные вычисления.
+5. Прикрутить UI.
+
+
+
+ML.Examples/
+  Program.cs
+  Examples/
+    And.cs
+    Xor.cs
+    Threshold.cs
+    Emotion.cs
+  Common/
+    Cli.cs
+  
+	
+
