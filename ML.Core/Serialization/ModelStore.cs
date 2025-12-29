@@ -63,7 +63,7 @@ public static class ModelStore
         string dir = ResolveModelsDir();
         Directory.CreateDirectory(dir);
 
-        string path = Path.Combine(dir, $"{modelName}.json");
+        string path = System.IO.Path.Combine(dir, $"{modelName}.json");
         File.WriteAllText(path, JsonSerializer.Serialize(dto, JsonOptions));
     }
 
@@ -72,7 +72,7 @@ public static class ModelStore
         if (string.IsNullOrWhiteSpace(modelName)) throw new ArgumentException("modelName is empty");
 
         string dir = ResolveModelsDir();
-        string path = Path.Combine(dir, $"{modelName}.json");
+        string path = System.IO.Path.Combine(dir, $"{modelName}.json");
 
         if (!File.Exists(path))
             throw new FileNotFoundException($"Model file not found: {path}");
@@ -140,8 +140,8 @@ public static class ModelStore
 
         for (int i = 0; i < 8; i++)
         {
-            var candidate = Path.Combine(dir, "ML", "Models");
-            if (Directory.Exists(Path.Combine(dir, "ML")) || Directory.Exists(candidate))
+            var candidate = System.IO.Path.Combine(dir, "ML", "Models");
+            if (Directory.Exists(System.IO.Path.Combine(dir, "ML")) || Directory.Exists(candidate))
                 return candidate;
 
             var parent = Directory.GetParent(dir);
@@ -150,7 +150,7 @@ public static class ModelStore
         }
 
         // fallback: относительный путь от текущей директории
-        return Path.Combine(Directory.GetCurrentDirectory(), "ML", "Models");
+        return System.IO.Path.Combine(Directory.GetCurrentDirectory(), "ML", "Models");
     }
 
     // DTO
