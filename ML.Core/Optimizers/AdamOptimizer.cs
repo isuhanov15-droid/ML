@@ -1,72 +1,96 @@
+using System;
+using System.Collections.Generic;
 using ML.Core.Abstractions;
-namespace ML.Core.Optimizers;
 
-
-public class AdamOptimizer : IOptimizer
+namespace ML.Core.Optimizers
 {
-    private readonly double _lr;
-    private readonly double _beta1;
-    private readonly double _beta2;
-    private readonly double _eps;
-
-    private int _t = 0;
-
-    public int StepIndex => _t;
-    public void SetStepIndex(int t) => _t = t;
-
-
-    private readonly Dictionary<double[], double[]> _m = new();
-    private readonly Dictionary<double[], double[]> _v = new();
-
-    private readonly Dictionary<Neuron, double> _mb = new();
-    private readonly Dictionary<Neuron, double> _vb = new();
-
-    public AdamOptimizer(
-        double learningRate = 0.001,
-        double beta1 = 0.9,
-        double beta2 = 0.999,
-        double epsilon = 1e-8)
+    /// <summary>
+    /// Adam optimizer, работает с IParameter.
+    /// НЕ знает про Neuron. Всё состояние хранит на параметр.
+    /// </summary>
+    public sealed class AdamOptimizer : IOptimizer
     {
-        _lr = learningRate;
-        _beta1 = beta1;
-        _beta2 = beta2;
-        _eps = epsilon;
-    }
+        private readonly double _lr;
+        private readonly double _beta1;
+        private readonly double _beta2;
+        private readonly double _eps;
 
-    public void Step(Neuron neuron)
-    {
-        if (!_m.ContainsKey(neuron.Weights))
+        private int _t = 0;
+
+        private sealed class State
         {
-            _m[neuron.Weights] = new double[neuron.Weights.Length];
-            _v[neuron.Weights] = new double[neuron.Weights.Length];
-            _mb[neuron] = 0.0;
-            _vb[neuron] = 0.0;
+            public double[] M = Array.Empty<double>();
+            public double[] V = Array.Empty<double>();
         }
 
-        for (int i = 0; i < neuron.Weights.Length; i++)
+        private readonly Dictionary<IParameter, State> _states = new();
+
+        public AdamOptimizer(
+            double learningRate = 0.001,
+            double beta1 = 0.9,
+            double beta2 = 0.999,
+            double epsilon = 1e-8)
         {
-            double g = neuron.WeightGradients[i];
-
-            _m[neuron.Weights][i] = _beta1 * _m[neuron.Weights][i] + (1 - _beta1) * g;
-            _v[neuron.Weights][i] = _beta2 * _v[neuron.Weights][i] + (1 - _beta2) * g * g;
-
-            double mHat = _m[neuron.Weights][i] / (1 - Math.Pow(_beta1, _t + 1));
-            double vHat = _v[neuron.Weights][i] / (1 - Math.Pow(_beta2, _t + 1));
-
-            neuron.Weights[i] -= _lr * mHat / (Math.Sqrt(vHat) + _eps);
+            _lr = learningRate;
+            _beta1 = beta1;
+            _beta2 = beta2;
+            _eps = epsilon;
         }
 
-        // bias
-        double gb = neuron.BiasGradient;
+        public void Step(IEnumerable<IParameter> parameters)
+        {
+            if (parameters == null) throw new ArgumentNullException(nameof(parameters));
 
-        _mb[neuron] = _beta1 * _mb[neuron] + (1 - _beta1) * gb;
-        _vb[neuron] = _beta2 * _vb[neuron] + (1 - _beta2) * gb * gb;
+            _t++;
 
-        double mbHat = _mb[neuron] / (1 - Math.Pow(_beta1, _t + 1));
-        double vbHat = _vb[neuron] / (1 - Math.Pow(_beta2, _t + 1));
+            foreach (var p in parameters)
+            {
+                if (p.Value.Length != p.Grad.Length)
+                    throw new InvalidOperationException("Parameter Value/Grad length mismatch.");
 
-        neuron.Bias -= _lr * mbHat / (Math.Sqrt(vbHat) + _eps);
+                if (!_states.TryGetValue(p, out var st))
+                {
+                    st = new State
+                    {
+                        M = new double[p.Value.Length],
+                        V = new double[p.Value.Length]
+                    };
+                    _states[p] = st;
+                }
+                else
+                {
+                    // если вдруг параметр изменил размер (не должен), переинициализируем
+                    if (st.M.Length != p.Value.Length)
+                    {
+                        st.M = new double[p.Value.Length];
+                        st.V = new double[p.Value.Length];
+                    }
+                }
+
+                // bias correction
+                double b1t = 1.0 - Math.Pow(_beta1, _t);
+                double b2t = 1.0 - Math.Pow(_beta2, _t);
+
+                for (int i = 0; i < p.Value.Length; i++)
+                {
+                    double g = p.Grad[i];
+
+                    st.M[i] = _beta1 * st.M[i] + (1.0 - _beta1) * g;
+                    st.V[i] = _beta2 * st.V[i] + (1.0 - _beta2) * g * g;
+
+                    double mHat = st.M[i] / b1t;
+                    double vHat = st.V[i] / b2t;
+
+                    p.Value[i] -= _lr * mHat / (Math.Sqrt(vHat) + _eps);
+                }
+            }
+        }
+
+        public void ZeroGrad(IEnumerable<IParameter> parameters)
+        {
+            if (parameters == null) throw new ArgumentNullException(nameof(parameters));
+            foreach (var p in parameters)
+                p.ZeroGrad();
+        }
     }
-
-    public void NextStep() => _t++;
 }

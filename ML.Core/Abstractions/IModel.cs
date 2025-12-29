@@ -1,10 +1,7 @@
 namespace ML.Core.Abstractions;
-
-// ILayer.cs
-public interface ILayer
+public interface IModel
 {
     double[] Forward(double[] input, bool training = true);
     double[] Backward(double[] gradOutput);
     IEnumerable<IParameter> Parameters();
 }
-

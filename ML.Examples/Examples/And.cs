@@ -1,8 +1,10 @@
-
 using ML.Core;
-using ML.Core.Data;
+using ML.Core.Losses;
+using ML.Core.Abstractions;
+using ML.Core.Optimizers;
 using ML.Core.Training;
 using ML.Core.Utils;
+using ML.Core.Training.Callbacks;
 
 namespace ML.Examples;
 
@@ -12,20 +14,31 @@ public static class And
     {
         Console.WriteLine("=== TEST: AND ===");
 
-        var data = new Dataset(new[]
+        var data = new (double[] x, int y)[]
         {
             (new double[]{0,0}, 0),
             (new double[]{0,1}, 0),
             (new double[]{1,0}, 0),
             (new double[]{1,1}, 1),
-        });
+        };
 
-        var net = Build();
-        var trainer = new Trainer(net, lr: 0.01);
+        // Нормализация (у тебя раньше так было в примерах)
+        var dataset = data.Select(s => (x: Normalizer.MinMax(s.x), y: s.y)).ToArray();
 
-        trainer.Train(data, epochs: 2000, logEvery: 100);
+        var model = Build();
+        var optimizer = new AdamOptimizer(learningRate: 0.01);
+        ILoss loss = new CrossEntropyLoss();
 
-        Evaluate(net, data);
+        var trainer = new Trainer(model, optimizer, loss);
+
+        var callbacks = new[]
+        {
+            new Callback(model, dataset, every: 100)
+        };
+
+        trainer.Train(dataset, epochs: 2000, callbacks: callbacks);
+
+        Evaluate(model, dataset);
         Console.WriteLine();
     }
 
@@ -39,13 +52,11 @@ public static class And
         return net;
     }
 
-    private static void Evaluate(Network net, Dataset data)
+    private static void Evaluate(IModel model, (double[] x, int y)[] data)
     {
-        foreach (var (x, y) in data.Samples)
+        foreach (var (x, y) in data)
         {
-            var input = Normalizer.MinMax(x);
-            var probs = net.Forward(input);
-
+            var probs = model.Forward(x, training: false);
             int pred = ArgMax(probs);
 
             Console.WriteLine(

@@ -1,6 +1,11 @@
+using System;
+using System.Linq;
 using ML.Core;
-using ML.Core.Data;
+using ML.Core.Abstractions;
+using ML.Core.Optimizers;
 using ML.Core.Training;
+using ML.Core.Training.Callbacks;
+using ML.Core.Losses;
 using ML.Core.Utils;
 
 namespace ML.Examples;
@@ -11,7 +16,7 @@ public static class Threshold
     {
         Console.WriteLine("=== TEST: Threshold classification ===");
 
-        var data = new Dataset(new[]
+        var data = new (double[] x, int y)[]
         {
             (new double[]{0.2,0.3,0.1,0.2}, 0),
             (new double[]{0.5,0.6,0.4,0.2}, 1),
@@ -19,14 +24,24 @@ public static class Threshold
             (new double[]{0.9,0.3,0.2,0.1}, 0),
             (new double[]{0.6,0.6,0.6,0.5}, 2),
             (new double[]{0.9,0.9,0.9,0.9}, 2),
-        });
+        };
 
-        var net = Build();
-        var trainer = new Trainer(net, lr: 0.01);
+        var dataset = data.Select(s => (x: Normalizer.MinMax(s.x), y: s.y)).ToArray();
 
-        trainer.Train(data, epochs: 2000, logEvery: 100);
+        var model = Build();
+        var optimizer = new AdamOptimizer(learningRate: 0.01);
+        ILoss loss = new CrossEntropyLoss();
 
-        Evaluate(net, data);
+        var trainer = new Trainer(model, optimizer, loss);
+
+        var callbacks = new[]
+        {
+            new Callback(model, dataset, every: 100)
+        };
+
+        trainer.Train(dataset, epochs: 2000, callbacks: callbacks);
+
+        Evaluate(model, dataset);
         Console.WriteLine();
     }
 
@@ -41,12 +56,11 @@ public static class Threshold
         return net;
     }
 
-    private static void Evaluate(Network net, Dataset data)
+    private static void Evaluate(IModel model, (double[] x, int y)[] data)
     {
-        foreach (var (x, y) in data.Samples)
+        foreach (var (x, y) in data)
         {
-            var input = Normalizer.MinMax(x);
-            var probs = net.Forward(input);
+            var probs = model.Forward(x, training: false);
             int pred = ArgMax(probs);
 
             Console.WriteLine(
