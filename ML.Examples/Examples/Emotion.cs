@@ -133,9 +133,17 @@ static class Emotion
         // Датасет
         var samples = GenerateSamples(count: 20000, seed: 10, noiseStd: 0.03);
         var dataset = samples.Select(s => (x: s.X, y: s.Y)).ToArray();
-
+        
+        Network model;
         // Модель
-        var model = BuildEmotions();
+        if (!System.IO.Directory.Exists(Core.Path.ModelPath.Emotion))
+        {
+            Console.WriteLine("Loading existing model...");
+            model = Network.Load(Core.Path.ModelPath.Emotion);
+            Console.WriteLine("Model loaded.\n");            
+        }
+        else
+        model = BuildEmotions();
 
         // Opt + Loss
         var optimizer = new AdamOptimizer(learningRate: 0.0005);
@@ -150,8 +158,9 @@ static class Emotion
         };
 
         // Обучение
-        trainer.Train(dataset, epochs: 100, callbacks: callbacks);
-        
+        trainer.TrainMiniBatch(dataset, epochs: 100, batchSize: 128, shuffle: true, callbacks: callbacks);
+
+        model.Save(Core.Path.ModelPath.Emotion);
 
         // Manual input
         Console.WriteLine("\n--- Manual input test ---");
