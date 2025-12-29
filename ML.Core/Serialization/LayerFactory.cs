@@ -28,8 +28,8 @@ public static class LayerFactory
 
         for (int i = 0; i < dto.Neurons.Count; i++)
         {
-            layer.Neurons[i].Weights = dto.Neurons[i].Weights;
-            layer.Neurons[i].Bias    = dto.Neurons[i].Bias;
+           // layer.Neurons[i].Weights = dto.Neurons[i].Weights;
+            //layer.Neurons[i].Bias    = dto.Neurons[i].Bias;
         }
 
         return layer;

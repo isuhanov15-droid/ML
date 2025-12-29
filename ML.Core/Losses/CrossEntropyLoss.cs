@@ -30,7 +30,7 @@ namespace ML.Core.Losses
             double p = _lastProbs[target];
             if (p < eps) p = eps;
 
-            return -Math.Log(p);
+            return -System.Math.Log(p);
         }
 
         public double[] Backward()

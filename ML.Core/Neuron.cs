@@ -34,7 +34,7 @@ public sealed class Neuron
 
         // Init weights
         // He/Glorot можно улучшать позже, пока оставим простой нормальный масштаб
-        double scale = 1.0 / Math.Sqrt(inputCount);
+        double scale = 1.0 / System.Math.Sqrt(inputCount);
         for (int i = 0; i < inputCount; i++)
             Weights[i] = (Rnd.NextDouble() * 2 - 1) * scale;
 
@@ -65,12 +65,12 @@ public sealed class Neuron
         return ActType switch
         {
             ActivationType.Linear => x,
-            ActivationType.Sigmoid => 1.0 / (1.0 + Math.Exp(-x)),
-            ActivationType.Tanh => Math.Tanh(x),
+            ActivationType.Sigmoid => 1.0 / (1.0 + System.Math.Exp(-x)),
+            ActivationType.Tanh => System.Math.Tanh(x),
             ActivationType.ReLu => x > 0 ? x : 0,
             ActivationType.LeakyReLu => x > 0 ? x : 0.01 * x,
-            ActivationType.ELU => x >= 0 ? x : (Math.Exp(x) - 1.0),
-            ActivationType.Softplus => Math.Log(1.0 + Math.Exp(x)),
+            ActivationType.ELU => x >= 0 ? x : (System.Math.Exp(x) - 1.0),
+            ActivationType.Softplus => System.Math.Log(1.0 + System.Math.Exp(x)),
             _ => x
         };
     }
@@ -84,8 +84,8 @@ public sealed class Neuron
             ActivationType.Tanh => 1.0 - A * A,
             ActivationType.ReLu => Z > 0 ? 1.0 : 0.0,
             ActivationType.LeakyReLu => Z > 0 ? 1.0 : 0.01,
-            ActivationType.ELU => Z >= 0 ? 1.0 : Math.Exp(Z),
-            ActivationType.Softplus => 1.0 / (1.0 + Math.Exp(-Z)),
+            ActivationType.ELU => Z >= 0 ? 1.0 : System.Math.Exp(Z),
+            ActivationType.Softplus => 1.0 / (1.0 + System.Math.Exp(-Z)),
             _ => 1.0
         };
     }

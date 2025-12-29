@@ -17,7 +17,7 @@ public sealed class Callback : ICallback
     {
         _model = model ?? throw new ArgumentNullException(nameof(model));
         _data = data ?? throw new ArgumentNullException(nameof(data));
-        _every = Math.Max(1, every);
+        _every = System.Math.Max(1, every);
     }
 
     public void OnEpochEnd(int epoch)

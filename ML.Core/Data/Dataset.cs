@@ -34,9 +34,8 @@ public partial class Dataset
         var shuffled = Shuffle(seed);
         var arr = shuffled.Samples.ToArray();
 
-        int trainCount = (int)Math.Round(arr.Length * trainRatio);
-        trainCount = Math.Clamp(trainCount, 1, arr.Length - 1);
-
+        int trainCount = (int)System.Math.Round(arr.Length * trainRatio);
+        trainCount = System.Math.Clamp(trainCount, 1, arr.Length - 1);
         var train = arr.Take(trainCount).ToArray();
         var test = arr.Skip(trainCount).ToArray();
 
@@ -51,7 +50,7 @@ public partial class Dataset
 
         for (int i = 0; i < arr.Length; i += batchSize)
         {
-            int len = Math.Min(batchSize, arr.Length - i);
+            int len = System.Math.Min(batchSize, arr.Length - i);
             var batch = new (double[] X, int Y)[len];
             Array.Copy(arr, i, batch, 0, len);
             yield return batch;

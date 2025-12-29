@@ -1,6 +1,7 @@
 using System;
 using System.Linq;
 using ML.Core;
+using ML.Core.Layers;
 using ML.Core.Abstractions;
 using ML.Core.Optimizers;
 using ML.Core.Training;
@@ -150,6 +151,7 @@ static class Emotion
 
         // Обучение
         trainer.Train(dataset, epochs: 100, callbacks: callbacks);
+        
 
         // Manual input
         Console.WriteLine("\n--- Manual input test ---");
@@ -195,12 +197,13 @@ static class Emotion
 
     private static Network BuildEmotions()
     {
-        var net = new Network(InputSize);
-        net.AddInputLayer();
-        net.AddHiddenLayer(32, ActivationType.ReLu);
-        net.AddHiddenLayer(16, ActivationType.ReLu);
-        net.AddOutputLayer(Classes, ActivationType.Linear);
-        net.AddSoftmax();
+        var net = new Network();
+        net.Add(new LinearLayer(10, 32));
+        net.Add(new ActivationLayer(32, ActivationType.ReLu));
+        net.Add(new LinearLayer(32, 16));
+        net.Add(new ActivationLayer(16, ActivationType.ReLu));
+        net.Add(new LinearLayer(16, 8));
+        net.Add(new SoftmaxLayer(8));
         return net;
     }
 

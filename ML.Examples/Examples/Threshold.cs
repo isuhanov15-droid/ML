@@ -1,6 +1,7 @@
 using System;
 using System.Linq;
 using ML.Core;
+using ML.Core.Layers;
 using ML.Core.Abstractions;
 using ML.Core.Optimizers;
 using ML.Core.Training;
@@ -47,12 +48,11 @@ public static class Threshold
 
     private static Network Build()
     {
-        var net = new Network(4);
-        net.AddInputLayer();
-        net.AddHiddenLayer(8, ActivationType.ReLu);
-        net.AddHiddenLayer(8, ActivationType.ReLu);
-        net.AddOutputLayer(3, ActivationType.Linear);
-        net.AddSoftmax();
+        var net = new Network();
+        net.Add(new LinearLayer(2, 8));
+        net.Add(new ActivationLayer(8, ActivationType.ReLu));
+        net.Add(new LinearLayer(8, 2));
+        net.Add(new SoftmaxLayer(2));
         return net;
     }
 

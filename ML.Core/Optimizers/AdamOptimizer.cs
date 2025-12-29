@@ -68,8 +68,8 @@ namespace ML.Core.Optimizers
                 }
 
                 // bias correction
-                double b1t = 1.0 - Math.Pow(_beta1, _t);
-                double b2t = 1.0 - Math.Pow(_beta2, _t);
+                double b1t = 1.0 - System.Math.Pow(_beta1, _t);
+                double b2t = 1.0 - System.Math.Pow(_beta2, _t);
 
                 for (int i = 0; i < p.Value.Length; i++)
                 {
@@ -81,7 +81,7 @@ namespace ML.Core.Optimizers
                     double mHat = st.M[i] / b1t;
                     double vHat = st.V[i] / b2t;
 
-                    p.Value[i] -= _lr * mHat / (Math.Sqrt(vHat) + _eps);
+                    p.Value[i] -= _lr * mHat / (System.Math.Sqrt(vHat) + _eps);
                 }
             }
         }

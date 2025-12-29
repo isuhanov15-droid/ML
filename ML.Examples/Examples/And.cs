@@ -1,4 +1,5 @@
 using ML.Core;
+using ML.Core.Layers;
 using ML.Core.Losses;
 using ML.Core.Abstractions;
 using ML.Core.Optimizers;
@@ -44,11 +45,11 @@ public static class And
 
     private static Network Build()
     {
-        var net = new Network(2);
-        net.AddInputLayer();
-        net.AddHiddenLayer(4, ActivationType.ReLu);
-        net.AddOutputLayer(2, ActivationType.Linear);
-        net.AddSoftmax();
+        var net = new Network();
+        net.Add(new LinearLayer(2, 8));
+        net.Add(new ActivationLayer(8, ActivationType.ReLu));
+        net.Add(new LinearLayer(8, 2));
+        net.Add(new SoftmaxLayer(2));
         return net;
     }
 
