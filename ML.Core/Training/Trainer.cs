@@ -32,12 +32,6 @@ namespace ML.Core.Training
                     _model.Backward(grad);
 
                     _optimizer.Step(_model.Parameters());
-                    foreach (var p in _model.Parameters())
-                    {
-                        if (p is ML.Core.Abstractions.Parameter pp)
-                            pp.Sync();
-                    }
-
                     _optimizer.ZeroGrad(_model.Parameters());
                 }
 
