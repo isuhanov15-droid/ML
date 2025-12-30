@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using ML.Core.Abstractions;
-using ML.Core.Training.Collbacks;
+using ML.Core.Training.Callbacks;
 
 namespace ML.Core.Training;
 
@@ -12,113 +12,163 @@ public sealed class Trainer
     private readonly IOptimizer _optimizer;
     private readonly ILoss _loss;
 
-    private static readonly Random Rnd = new();
+    private readonly Random _rnd;
 
     public Trainer(IModel model, IOptimizer optimizer, ILoss loss)
     {
         _model = model ?? throw new ArgumentNullException(nameof(model));
         _optimizer = optimizer ?? throw new ArgumentNullException(nameof(optimizer));
         _loss = loss ?? throw new ArgumentNullException(nameof(loss));
+
+        // seed задаём в TrainOptions — здесь пусть будет дефолтный
+        _rnd = new Random();
     }
 
     /// <summary>
-    /// Старый режим (SGD): шаг на каждом примере.
-    /// Оставляем как есть, чтобы ничего не сломать.
+    /// Каноническая сигнатура обучения ядра.
+    /// Ядро считает только Loss (train + optional val).
+    /// Метрики (accuracy) — снаружи (Examples).
     /// </summary>
-    public void Train(
-        IEnumerable<(double[] x, int y)> dataset,
-        int epochs,
-        IEnumerable<ICallback>? callbacks = null)
+    public void Train(IEnumerable<(double[] x, int y)> dataset, TrainOptions options)
     {
         if (dataset == null) throw new ArgumentNullException(nameof(dataset));
-        if (epochs <= 0) throw new ArgumentException("epochs must be > 0", nameof(epochs));
+        if (options == null) throw new ArgumentNullException(nameof(options));
 
-        var data = dataset as (double[] x, int y)[] ?? dataset.ToArray();
-        var cbs = callbacks?.ToArray() ?? Array.Empty<ICallback>();
+        if (options.Epochs <= 0) throw new ArgumentException("Epochs must be > 0", nameof(options));
+        if (options.BatchSize <= 0) throw new ArgumentException("BatchSize must be > 0", nameof(options));
+        if (options.GradientAccumulationSteps <= 0) throw new ArgumentException("GradientAccumulationSteps must be > 0", nameof(options));
 
-        for (int epoch = 0; epoch < epochs; epoch++)
+        // фиксируем данные (один раз)
+        var trainData = dataset as (double[] x, int y)[] ?? dataset.ToArray();
+        if (trainData.Length == 0) throw new ArgumentException("Dataset is empty", nameof(dataset));
+
+        var valData = options.Validation == null
+            ? null
+            : (options.Validation as (double[] x, int y)[] ?? options.Validation.ToArray());
+
+        var callbacks = options.Callbacks?.ToArray() ?? Array.Empty<ITrainCallback>();
+
+        // Seed для shuffle
+        var rnd = options.Seed.HasValue ? new Random(options.Seed.Value) : _rnd;
+
+        // Параметры модели — берём один раз
+        var ps = _model.Parameters().ToArray();
+
+        // Индексы для shuffle
+        var indices = Enumerable.Range(0, trainData.Length).ToArray();
+
+        int batchSize = options.BatchSize;
+
+        for (int epoch = 1; epoch <= options.Epochs; epoch++)
         {
-            foreach (var (x, y) in data)
-            {
-                var output = _model.Forward(x, training: true);
+            if (options.Shuffle)
+                Shuffle(indices, rnd);
 
-                _loss.Forward(output, y);
-                var grad = _loss.Backward();
+            double epochLossSum = 0.0;
+            int epochSamples = 0;
 
-                _model.Backward(grad);
+            // grad accumulation
+            int accumSteps = options.GradientAccumulationSteps;
+            int accumCounter = 0;
 
-                var ps = _model.Parameters();
-                _optimizer.Step(ps);
-                _optimizer.ZeroGrad(ps);
-                
-            }
-
-            foreach (var cb in cbs)
-                cb.OnEpochEnd(epoch);
-        }
-    }
-
-    /// <summary>
-    /// Новый режим: Mini-Batch Gradient Descent (с Adam тоже отлично).
-    /// ВАЖНО: градиенты усредняются по размеру батча.
-    /// </summary>
-    public void TrainMiniBatch(
-        IEnumerable<(double[] x, int y)> dataset,
-        int epochs,
-        int batchSize = 64,
-        bool shuffle = true,
-        IEnumerable<ICallback>? callbacks = null)
-    {
-        if (dataset == null) throw new ArgumentNullException(nameof(dataset));
-        if (epochs <= 0) throw new ArgumentException("epochs must be > 0", nameof(epochs));
-        if (batchSize <= 0) throw new ArgumentException("batchSize must be > 0", nameof(batchSize));
-
-        var data = dataset as (double[] x, int y)[] ?? dataset.ToArray();
-        var cbs = callbacks?.ToArray() ?? Array.Empty<ICallback>();
-
-        // индексы — один раз, потом тасуем in-place
-        var indices = Enumerable.Range(0, data.Length).ToArray();
-
-        // параметры модели (у слоёв у тебя кеш, так что это дёшево)
-        var ps = _model.Parameters();
-
-        for (int epoch = 0; epoch < epochs; epoch++)
-        {
-            if (shuffle)
-                Shuffle(indices);
+            // Важно: начинаем эпоху с чистых градиентов
+            _optimizer.ZeroGrad(ps);
 
             for (int start = 0; start < indices.Length; start += batchSize)
             {
                 int end = System.Math.Min(start + batchSize, indices.Length);
                 int actualBatch = end - start;
 
-                // важно: обнуляем грады ПЕРЕД батчем
-                _optimizer.ZeroGrad(ps);
+                if (options.DropLast && actualBatch < batchSize)
+                    break;
 
-                // 1) копим градиенты по всем примерам батча
+                // 1) копим градиенты по батчу
                 for (int t = start; t < end; t++)
                 {
-                    var (x, y) = data[indices[t]];
+                    var (x, y) = trainData[indices[t]];
 
                     var output = _model.Forward(x, training: true);
 
-                    _loss.Forward(output, y);
-                    var grad = _loss.Backward();
+                    double lossValue = _loss.Forward(output, y);
+                    if (double.IsNaN(lossValue) || double.IsInfinity(lossValue))
+                        throw new InvalidOperationException($"Loss became NaN/Inf at epoch={epoch}.");
 
+                    epochLossSum += lossValue;
+                    epochSamples++;
+
+                    var grad = _loss.Backward();
                     _model.Backward(grad);
                 }
 
-                // 2) усредняем градиенты по батчу
+                // 2) усредняем градиенты по батчу (чтобы LR не зависел от batchSize)
                 ScaleGradients(ps, 1.0 / actualBatch);
 
-                // 3) шаг оптимизатора один раз на батч
-                _optimizer.Step(ps);
-                
+                accumCounter++;
+
+                // 3) накопление: step раз в N батчей
+                if (accumCounter >= accumSteps)
+                {
+                    if (options.GradClipNorm.HasValue)
+                        ClipGradientsByNorm(ps, options.GradClipNorm.Value);
+
+                    _optimizer.Step(ps);
+                    _optimizer.ZeroGrad(ps);
+
+                    accumCounter = 0;
+                }
             }
 
-            foreach (var cb in cbs)
-                cb.OnEpochEnd(epoch);
+            // если остались накопленные грады — делаем финальный шаг
+            if (accumCounter > 0)
+            {
+                if (options.GradClipNorm.HasValue)
+                    ClipGradientsByNorm(ps, options.GradClipNorm.Value);
+
+                _optimizer.Step(ps);
+                _optimizer.ZeroGrad(ps);
+            }
+
+            // Train loss (средний по эпохе)
+            double trainLoss = epochSamples == 0 ? double.NaN : epochLossSum / epochSamples;
+
+            // Val loss (средний) — только loss, без метрик
+            double? valLoss = null;
+            if (valData != null && valData.Length > 0)
+                valLoss = EvaluateLoss(valData);
+
+            var result = new TrainEpochResult(epoch, trainLoss, valLoss);
+
+            // Callbacks
+            foreach (var cb in callbacks)
+            {
+                cb.OnEpochEnd(result);
+                if (result.StopRequested)
+                    break;
+            }
+
+            if (result.StopRequested)
+                break;
         }
+    }
+
+    private double EvaluateLoss((double[] x, int y)[] data)
+    {
+        double sum = 0.0;
+        int n = 0;
+
+        foreach (var (x, y) in data)
+        {
+            var output = _model.Forward(x, training: false);
+            double lossValue = _loss.Forward(output, y);
+
+            if (double.IsNaN(lossValue) || double.IsInfinity(lossValue))
+                throw new InvalidOperationException("Validation loss became NaN/Inf.");
+
+            sum += lossValue;
+            n++;
+        }
+
+        return n == 0 ? double.NaN : sum / n;
     }
 
     private static void ScaleGradients(IEnumerable<IParameter> parameters, double scale)
@@ -131,11 +181,37 @@ public sealed class Trainer
         }
     }
 
-    private static void Shuffle(int[] a)
+    private static void ClipGradientsByNorm(IEnumerable<IParameter> parameters, double maxNorm)
+    {
+        if (maxNorm <= 0) return;
+
+        // считаем общую L2 норму
+        double sumSq = 0.0;
+        foreach (var p in parameters)
+        {
+            var g = p.Grad;
+            for (int i = 0; i < g.Length; i++)
+                sumSq += g[i] * g[i];
+        }
+
+        double norm = System.Math.Sqrt(sumSq);
+        if (norm <= maxNorm || norm == 0.0) return;
+
+        double scale = maxNorm / norm;
+
+        foreach (var p in parameters)
+        {
+            var g = p.Grad;
+            for (int i = 0; i < g.Length; i++)
+                g[i] *= scale;
+        }
+    }
+
+    private static void Shuffle(int[] a, Random rnd)
     {
         for (int i = a.Length - 1; i > 0; i--)
         {
-            int j = Rnd.Next(i + 1);
+            int j = rnd.Next(i + 1);
             (a[i], a[j]) = (a[j], a[i]);
         }
     }

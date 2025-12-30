@@ -33,10 +33,11 @@ public static class Xor
 
         var trainer = new Trainer(model, optimizer, loss);
 
-        var callbacks = new[]
-        {
-            new Callback(model, dataset, every: 100)
-        };
+        var callbacks = new ITrainCallback[]
+{
+    new CallbackAdapter(new Callback(model, dataset, every: 1)),
+};
+
 
         trainer.Train(dataset, epochs: 2000, callbacks: callbacks);
 

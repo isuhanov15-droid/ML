@@ -1,7 +1,8 @@
-namespace ML.Core.Training.Collbacks;
+namespace ML.Core.Training.Callbacks;
 public interface ICallback
 {
     void OnEpochEnd(int epoch);
+    //void OnEpochEnd(TrainEpochResult r);
 }
 
 public class StopFileCallback : ICallback

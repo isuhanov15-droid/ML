@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using ML.Core.Abstractions;
-using ML.Core.Training.Collbacks;
+using ML.Core.Training.Callbacks;
 
 namespace ML.Core.Training.Callbacks;
 
