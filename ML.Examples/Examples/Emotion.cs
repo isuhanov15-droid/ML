@@ -1,10 +1,8 @@
 using System;
 using System.Collections.Generic;
-using System.IO;
 using System.Linq;
 using System.Text.RegularExpressions;
 using ML.Core;
-using ML.Core.Abstractions;
 using ML.Core.Layers;
 using ML.Core.Losses;
 using ML.Core.Optimizers;
@@ -15,6 +13,15 @@ namespace ML.Examples;
 
 static class Emotion
 {
+    // =========================================================
+    // Канон под текущее ядро:
+    // - Save/Load: по modelName -> ML/Models/<name>.json (ModelStore)
+    // - Trainer: Train(dataset, TrainOptions)
+    // - Метрики (accuracy) НЕ в Core, а в Examples через callbacks
+    // =========================================================
+
+    private const string ModelName = "emotion_ru";   // сохранится как ML/Models/emotion_ru.json
+
     // =========================
     // 1) Эмоции (16 классов)
     // =========================
@@ -48,16 +55,15 @@ static class Emotion
     public const int Classes = 16;
 
     // =========================
-    // 2) Фичи текста (≈52)
+    // 2) Фичи текста (52)
     // =========================
-    // Структура:
     // [0..15]  - лексиконы эмоций/сигналов
     // [16..31] - форма/пунктуация/капс/длина/повторы/эмодзи
-    // [32..51] - грамматические/контекстные признаки (не/вопросительные/я-ты/время/соц)
+    // [32..51] - грамматические/контекстные признаки
     public const int InputSize = 52;
 
-    // --- токенизация ---
     private static readonly Regex TokenRx = new(@"[^\p{L}\p{Nd}]+", RegexOptions.Compiled);
+
     private static string[] Tokenize(string text)
     {
         text ??= "";
@@ -72,7 +78,6 @@ static class Emotion
     // =========================
     // 3) Safety gate (до ML)
     // =========================
-    // Это НЕ “эмоции”, это приоритет безопасности.
     private static readonly HashSet<string> LexViolence = new(StringComparer.OrdinalIgnoreCase)
     {
         "убью","убить","зарежу","зарезать","пристрелю","застрелю","расстреляю","сломаю","изобью","ударю",
@@ -92,31 +97,30 @@ static class Emotion
         return false;
     }
 
-    private static void PrintSafetyResponse(string text)
+    private static void PrintSafetyResponse()
     {
         Console.WriteLine("Эмоция: Страх");
-        Console.WriteLine("Ответ:  Я не могу поддерживать угрозы или вред. Давай остановимся, выдохнем и переключимся на безопасный разговор.");
+        Console.WriteLine("Ответ:  Я не поддерживаю угрозы/насилие или самоповреждение. Давай остановимся и переведём разговор в безопасный формат.");
         Console.WriteLine();
     }
 
     // =========================
-    // 4) Лексиконы (ядро смысла)
+    // 4) Лексиконы
     // =========================
-    // Небольшие, но “сильные”: расширять можно по мере необходимости.
     private static readonly HashSet<string> LxJoy = new(StringComparer.OrdinalIgnoreCase)
     { "ура","класс","кайф","рад","счастлив","счастлива","победа","вышло","получилось","удалось","круто","огонь" };
 
     private static readonly HashSet<string> LxSmile = new(StringComparer.OrdinalIgnoreCase)
-    { "приятно","тепло","улыбаюсь","улыбка","милота","хорошо","уютно","лампово","светло" };
+    { "приятно","тепло","улыбаюсь","улыбка","мило","хорошо","уютно","лампово","светло","привет" };
 
     private static readonly HashSet<string> LxLaugh = new(StringComparer.OrdinalIgnoreCase)
-    { "ахаха","хаха","лол","ржу","смешно","прикол","шутка","угар","анекдот" };
+    { "ахаха","хаха","лол","ржу","смешно","прикол","шутка","угар","оруу" };
 
     private static readonly HashSet<string> LxGratitude = new(StringComparer.OrdinalIgnoreCase)
-    { "спасибо","благодарю","признателен","признательна","ценю","спасиб","благодарность","лучший","лучшая" };
+    { "спасибо","благодарю","признателен","признательна","ценю","спасиб","благодарность" };
 
     private static readonly HashSet<string> LxPride = new(StringComparer.OrdinalIgnoreCase)
-    { "горжусь","горд","горда","достиг","достигла","смог","смогла","сделал","сделала","вынес","выдержал" };
+    { "горжусь","горд","горда","достиг","достигла","смог","смогла","сделал","сделала","выдержал" };
 
     private static readonly HashSet<string> LxInterest = new(StringComparer.OrdinalIgnoreCase)
     { "интересно","любопытно","хочу","узнать","почему","как","что","разберемся","посмотрим","идея" };
@@ -128,41 +132,40 @@ static class Emotion
     { "грустно","печально","тоска","слезы","плачу","пусто","жалко","скучаю","уныло" };
 
     private static readonly HashSet<string> LxSuffering = new(StringComparer.OrdinalIgnoreCase)
-    { "больно","страдаю","тяжело","невыносимо","плохо","разбит","выжат","выгорание","кошмарно","нетсил" };
+    { "больно","страдаю","тяжело","невыносимо","плохо","разбит","выжат","выгорание","нетсил","нет" };
 
     private static readonly HashSet<string> LxFear = new(StringComparer.OrdinalIgnoreCase)
     { "страшно","опасно","ужас","паника","пугает","угроза","кошмар","боюсь","жутко","обстрел","взрыв" };
 
     private static readonly HashSet<string> LxAnger = new(StringComparer.OrdinalIgnoreCase)
-    { "злюсь","бесит","раздражает","достало","ярость","взбесило","ненавижу","сука","идиот","тварь" };
+    { "злюсь","бесит","раздражает","достало","ярость","взбесило","ненавижу","сука","идиот" };
 
     private static readonly HashSet<string> LxDisgust = new(StringComparer.OrdinalIgnoreCase)
-    { "фу","противно","мерзко","отвратительно","тошно","воняет","грязь","гадость","пакость" };
+    { "фу","противно","мерзко","отвратительно","тошно","воняет","гадость","пакость" };
 
     private static readonly HashSet<string> LxShame = new(StringComparer.OrdinalIgnoreCase)
-    { "стыдно","стыд","позор","неловко","опозорился","опозорилась","смущаюсь","смущение" };
+    { "стыдно","стыд","позор","неловко","опозорился","опозорилась","смущаюсь" };
 
     private static readonly HashSet<string> LxGuilt = new(StringComparer.OrdinalIgnoreCase)
-    { "виноват","виновата","вина","прости","извини","простите","сожалею","жальчто","неправ" };
+    { "виноват","виновата","вина","прости","извини","простите","сожалею","неправ" };
 
     private static readonly HashSet<string> LxLoneliness = new(StringComparer.OrdinalIgnoreCase)
-    { "один","одна","одинок","одиноко","никого","пусто","нетникого","втроемне","не с кем","без тебя" };
+    { "один","одна","одинок","одиноко","никого","пусто","без тебя","не с кем" };
 
-    // общие сигналы
     private static readonly HashSet<string> LxNegation = new(StringComparer.OrdinalIgnoreCase)
-    { "не","нет","никогда","ни","нифига","ничего","никак" };
+    { "не","нет","никогда","ни","ничего","никак" };
 
     private static readonly HashSet<string> LxQuestion = new(StringComparer.OrdinalIgnoreCase)
     { "как","почему","зачем","что","когда","где","кто","сколько","ли" };
 
     private static readonly HashSet<string> LxFirstPerson = new(StringComparer.OrdinalIgnoreCase)
-    { "я","мне","меня","мой","моя","мои","со мной","мною" };
+    { "я","мне","меня","мой","моя","мои" };
 
     private static readonly HashSet<string> LxSecondPerson = new(StringComparer.OrdinalIgnoreCase)
     { "ты","тебе","тебя","твой","твоя","твои","вы","вам","вас" };
 
     private static readonly HashSet<string> LxSupport = new(StringComparer.OrdinalIgnoreCase)
-    { "рядом","с тобой","обнимаю","держись","помогу","вместе","поддержу","семья","друг","друзья" };
+    { "рядом","обнимаю","держись","помогу","вместе","поддержу","семья","друг","друзья" };
 
     private static int CountLex(IEnumerable<string> tokens, HashSet<string> lex)
     {
@@ -172,15 +175,23 @@ static class Emotion
         return c;
     }
 
+    private static int CountAny(IEnumerable<string> tokens, params string[] words)
+    {
+        int c = 0;
+        foreach (var t in tokens)
+            for (int i = 0; i < words.Length; i++)
+                if (t.Equals(words[i], StringComparison.OrdinalIgnoreCase)) { c++; break; }
+        return c;
+    }
+
     // =========================
-    // 5) Улучшенный экстрактор фич
+    // 5) Features
     // =========================
     public static double[] TextToFeatures(string text)
     {
         text ??= "";
         var tokens = Tokenize(text);
 
-        // Лексиконы (0..15)
         int joy = CountLex(tokens, LxJoy);
         int smile = CountLex(tokens, LxSmile);
         int laugh = CountLex(tokens, LxLaugh);
@@ -198,10 +209,8 @@ static class Emotion
         int guilt = CountLex(tokens, LxGuilt);
         int lonely = CountLex(tokens, LxLoneliness);
 
-        // scale: 3 сигнальных слова ≈ 1.0
         const double scale = 3.0;
 
-        // Форма/пунктуация/капс/длина/повторы/эмодзи (16..31)
         int len = text.Length;
         int words = tokens.Length;
 
@@ -215,28 +224,25 @@ static class Emotion
         int letters = text.Count(ch => char.IsLetter(ch));
         double capsRatio = letters == 0 ? 0.0 : (double)upperLetters / letters;
 
-        int repeats = CountCharRepeats(text);      // "ааа", "!!!", "))))"
-        int smiles = CountSmiles(text);            // :) :-) :D ))))
-        int emojis = CountEmojiLike(text);         // грубый подсчёт эмодзи-символов
+        int repeats = CountCharRepeats(text);
+        int smiles = CountSmiles(text);
+        int emojis = CountEmojiLike(text);
 
-        // Контекст (32..51)
         int neg = CountLex(tokens, LxNegation);
         int qwords = CountLex(tokens, LxQuestion);
         int fp = CountLex(tokens, LxFirstPerson);
         int sp = CountLex(tokens, LxSecondPerson);
         int support = CountLex(tokens, LxSupport);
 
-        // простые временные/модальные маркеры
         int past = CountAny(tokens, "вчера", "было", "была", "был", "потерял", "потеряла", "сделал", "сделала", "успел", "успела");
-        int future = CountAny(tokens, "завтра", "будет", "буду", "сделаю", "сделаем", "хочу", "план");
+        int future = CountAny(tokens, "завтра", "будет", "буду", "сделаю", "сделаем", "план");
         int now = CountAny(tokens, "сейчас", "сегодня", "вот", "прям", "именно");
 
-        // “интенсивность” (мат/усилители) — грубо
         int intens = CountAny(tokens, "очень", "капец", "сильно", "реально", "жесть", "просто", "пипец");
 
         var x = new double[InputSize];
 
-        // 0..15
+        // 0..15: эмо-лексиконы + баланс
         x[0]  = Clamp01(joy / scale);
         x[1]  = Clamp01(smile / scale);
         x[2]  = Clamp01(laugh / scale);
@@ -254,74 +260,45 @@ static class Emotion
         x[13] = Clamp01(guilt / scale);
         x[14] = Clamp01(lonely / scale);
 
-        // 15 — базовый “позитив/негатив баланс”
         double pos = x[0] + x[1] + x[2] + x[3] + x[4] + x[5] + x[6];
         double negv = x[7] + x[8] + x[9] + x[10] + x[11] + x[12] + x[13] + x[14];
-        x[15] = Clamp01(0.5 + 0.25 * (pos - negv)); // центр 0.5
+        x[15] = Clamp01(0.5 + 0.25 * (pos - negv));
 
-        // 16..31 (форма)
-        x[16] = Clamp01(len / 140.0);
-        x[17] = Clamp01(words / 24.0);
-        x[18] = Clamp01(exclam / 6.0);
-        x[19] = Clamp01(quest / 6.0);
+        // 16..31: форма
+        x[16] = Clamp01(len / 120.0);
+        x[17] = Clamp01(words / 20.0);
+        x[18] = Clamp01(exclam / 5.0);
+        x[19] = Clamp01(quest / 5.0);
         x[20] = Clamp01(dots / 3.0);
-        x[21] = Clamp01(comma / 6.0);
-        x[22] = Clamp01(quotes / 4.0);
-        x[23] = Clamp01(capsRatio * 1.5);
-        x[24] = Clamp01(repeats / 6.0);
+        x[21] = Clamp01(comma / 8.0);
+        x[22] = Clamp01(quotes / 6.0);
+        x[23] = Clamp01(capsRatio);
+        x[24] = Clamp01(repeats / 10.0);
         x[25] = Clamp01(smiles / 6.0);
-        x[26] = Clamp01(emojis / 4.0);
+        x[26] = Clamp01(emojis / 6.0);
 
-        // 27..31 — “сглаженные агрегаты”
-        x[27] = Clamp01((x[18] + x[23] + x[24]) / 3.0); // возбуждение/накал
-        x[28] = Clamp01((x[19] + Clamp01(qwords / 4.0)) / 2.0); // вопросительность
-        x[29] = Clamp01((x[25] + x[26] + x[1]) / 3.0); // дружелюбность/соц-сигнал
-        x[30] = Clamp01((x[8] + x[9] + x[14]) / 3.0); // “тяжёлость”
-        x[31] = Clamp01((x[0] + x[4] + x[6]) / 3.0); // “уверенный позитив”
+        // запас
+        x[27] = Clamp01((exclam + quest) / 6.0);
+        x[28] = Clamp01((repeats + emojis) / 10.0);
+        x[29] = Clamp01((len > 0 && text.Trim().EndsWith(")") ? 1.0 : 0.0));
+        x[30] = Clamp01((len > 0 && text.Trim().EndsWith(".") ? 1.0 : 0.0));
+        x[31] = Clamp01((len > 0 && text.Trim().EndsWith("!") ? 1.0 : 0.0));
 
-        // 32..51 (контекст)
+        // 32..51: контекст
         x[32] = Clamp01(neg / 3.0);
-        x[33] = Clamp01(qwords / 4.0);
-        x[34] = Clamp01(fp / 4.0);
-        x[35] = Clamp01(sp / 4.0);
+        x[33] = Clamp01(qwords / 3.0);
+        x[34] = Clamp01(fp / 3.0);
+        x[35] = Clamp01(sp / 3.0);
         x[36] = Clamp01(support / 3.0);
 
-        x[37] = Clamp01(past / 3.0);
-        x[38] = Clamp01(future / 3.0);
-        x[39] = Clamp01(now / 3.0);
-        x[40] = Clamp01(intens / 4.0);
+        x[37] = Clamp01(past / 2.0);
+        x[38] = Clamp01(future / 2.0);
+        x[39] = Clamp01(now / 2.0);
+        x[40] = Clamp01(intens / 3.0);
 
-        // Отрицание влияет на позитивные лексиконы (легкая эвристика)
-        // "не смешно", "не рад" — уменьшаем смех/радость
-        double negFactor = 1.0 - 0.5 * x[32];
-        x[41] = Clamp01(x[0] * negFactor);
-        x[42] = Clamp01(x[2] * negFactor);
-        x[43] = Clamp01(x[1] * negFactor);
-
-        // Конфликт “ты” + злость
-        x[44] = Clamp01(x[35] * x[10] * 2.0);
-
-        // Конфликт “я” + вина/стыд
-        x[45] = Clamp01(x[34] * (x[13] + x[12]) * 1.2);
-
-        // Одиночество без поддержки
-        x[46] = Clamp01(x[14] * (1.0 - x[36]));
-
-        // Спокойствие + поддержка
-        x[47] = Clamp01(x[6] * (0.6 + 0.6 * x[36]));
-
-        // Интерес + вопросительность
-        x[48] = Clamp01((x[5] + x[28]) / 2.0);
-
-        // “Накал” + злость/страх
-        x[49] = Clamp01(x[27] * (x[10] + x[9]) * 0.9);
-
-        // “Тяжёлость” + страдание/грусть
-        x[50] = Clamp01(x[30] * (x[8] + x[7]) * 0.9);
-
-        // Резервный “сигнал неопределенности”: мало слов, мало лексиконов
-        double lexSum = pos + negv;
-        x[51] = Clamp01((1.0 - Clamp01(words / 6.0)) * (1.0 - Clamp01(lexSum)));
+        // немного “пустых” слотов под будущее расширение
+        for (int i = 41; i < InputSize; i++)
+            x[i] = 0.0;
 
         return x;
     }
@@ -329,41 +306,30 @@ static class Emotion
     private static int CountSubstring(string s, string sub)
     {
         if (string.IsNullOrEmpty(s) || string.IsNullOrEmpty(sub)) return 0;
-        int count = 0;
+        int c = 0;
         int idx = 0;
-        while ((idx = s.IndexOf(sub, idx, StringComparison.Ordinal)) >= 0)
+        while (true)
         {
-            count++;
+            idx = s.IndexOf(sub, idx, StringComparison.Ordinal);
+            if (idx < 0) break;
+            c++;
             idx += sub.Length;
         }
-        return count;
-    }
-
-    private static int CountAny(string[] tokens, params string[] words)
-    {
-        int c = 0;
-        foreach (var t in tokens)
-            for (int i = 0; i < words.Length; i++)
-                if (string.Equals(t, words[i], StringComparison.OrdinalIgnoreCase)) { c++; break; }
         return c;
     }
 
     private static int CountCharRepeats(string s)
     {
         if (string.IsNullOrEmpty(s)) return 0;
-        int repeats = 0;
-        int run = 1;
+        int best = 0;
+        int cur = 1;
         for (int i = 1; i < s.Length; i++)
         {
-            if (s[i] == s[i - 1]) run++;
-            else
-            {
-                if (run >= 3) repeats++;
-                run = 1;
-            }
+            if (s[i] == s[i - 1]) cur++;
+            else { best = Math.Max(best, cur); cur = 1; }
         }
-        if (run >= 3) repeats++;
-        return repeats;
+        best = Math.Max(best, cur);
+        return best >= 3 ? best : 0;
     }
 
     private static int CountSmiles(string s)
@@ -373,232 +339,85 @@ static class Emotion
         c += CountSubstring(s, ":)");
         c += CountSubstring(s, ":-)");
         c += CountSubstring(s, ":D");
-        c += CountSubstring(s, ":-D");
+        c += CountSubstring(s, "))");
         c += CountSubstring(s, ")))");
-        c += CountSubstring(s, "(((");
         return c;
     }
 
-    // грубый счёт эмодзи: Unicode диапазоны + суррогаты
     private static int CountEmojiLike(string s)
     {
         if (string.IsNullOrEmpty(s)) return 0;
+        // грубо: считаем символы из диапазона эмодзи-плоскостей
         int c = 0;
         foreach (var ch in s)
         {
-            // очень приблизительно, но достаточно как “сигнал”
-            if (ch >= 0x2600 && ch <= 0x27BF) c++;      // dingbats etc
-            if (ch >= 0x1F300) c++;                     // может не сработать на char (surrogate), ок
+            if (ch >= 0x2600 && ch <= 0x27BF) c++;
+            if (ch >= 0x1F300 && ch <= 0x1FAFF) c++;
         }
-        // дополнительно: если есть суррогаты — вероятно эмодзи
-        for (int i = 0; i < s.Length; i++)
-            if (char.IsSurrogate(s[i])) { c++; break; }
-
-        return c > 3 ? 3 : c; // ограничим
+        return c;
     }
 
     // =========================
-    // 6) Датасет фраз (RU)
+    // 6) Синтетический датасет
     // =========================
-    private static readonly Dictionary<E, string[]> PhrasePool = new()
-    {
-        [E.Neutral] = new[]
-        {
-            "привет", "нормально", "в целом ок", "обычный день", "без особых эмоций", "ровно", "как обычно",
-            "что нового", "как дела", "пока не знаю", "посмотрим"
-        },
+    private sealed record Sample(double[] x, int y);
 
-        [E.Joy] = new[]
-        {
-            "ура получилось", "я счастлив", "как же круто", "кайф", "вот это победа", "я рад", "вышло отлично",
-            "супер новость", "это реально класс", "всё получилось!"
-        },
-
-        [E.Smile] = new[]
-        {
-            "улыбаюсь", "приятно", "тепло на душе", "мне уютно", "так мило", "хорошо стало", "лампово",
-            "тихий кайф", "спокойная радость"
-        },
-
-        [E.Laugh] = new[]
-        {
-            "ахаха", "смешно", "лол", "я ржу", "угар", "шутка огонь", "прикол", "хаха да",
-            "это так смешно"
-        },
-
-        [E.Gratitude] = new[]
-        {
-            "спасибо", "спасибо тебе", "я благодарю", "очень ценю", "признателен", "ты лучшая", "спасибо большое",
-            "спасиб, выручил", "благодарность огромная"
-        },
-
-        [E.Pride] = new[]
-        {
-            "горжусь собой", "я смог", "я выдержал", "я сделал это", "достиг цели", "не сдался", "справился",
-            "закрыл задачу", "я молодец"
-        },
-
-        [E.Interest] = new[]
-        {
-            "интересно", "любопытно", "как это работает", "хочу понять", "давай разберемся", "почему так",
-            "есть идея", "можно попробовать", "а если так сделать"
-        },
-
-        [E.Calm] = new[]
-        {
-            "спокойно", "ровно", "всё под контролем", "я выдохнул", "пауза", "стабильно", "без паники",
-            "держим курс", "тихо и ясно"
-        },
-
-        [E.Sadness] = new[]
-        {
-            "грустно", "печально", "тоска", "пусто внутри", "слезы", "мне жаль", "сердце тяжелеет",
-            "не по себе", "скучаю"
-        },
-
-        [E.Suffering] = new[]
-        {
-            "очень тяжело", "мне больно", "невыносимо", "я выжат", "разбит", "нет сил", "выгорание",
-            "плохо", "не могу"
-        },
-
-        [E.Fear] = new[]
-        {
-            "мне страшно", "опасно", "паника", "пугает", "кошмар", "я боюсь", "угроза", "жутко",
-            "это тревожит"
-        },
-
-        [E.Anger] = new[]
-        {
-            "я злюсь", "меня бесит", "раздражает", "достало", "ярость", "взбесило", "ненавижу это",
-            "как же бесит"
-        },
-
-        [E.Disgust] = new[]
-        {
-            "фу противно", "мерзко", "отвратительно", "тошно", "гадость", "воняет", "противно смотреть",
-            "пакость"
-        },
-
-        [E.Shame] = new[]
-        {
-            "мне стыдно", "стыд", "неловко", "опозорился", "опозорилась", "как я мог", "позор",
-            "смущаюсь"
-        },
-
-        [E.Guilt] = new[]
-        {
-            "я виноват", "виновата", "прости", "извини", "моя вина", "сожалею", "неправ",
-            "жаль что так вышло"
-        },
-
-        [E.Loneliness] = new[]
-        {
-            "мне одиноко", "я один", "я одна", "нет никого", "пусто", "не с кем поговорить",
-            "без тебя пусто", "никто не пишет"
-        },
-    };
-
-    private static readonly Dictionary<E, string[]> ReactionPool = new()
-    {
-        [E.Neutral]    = new[] { "Окей 🙂", "Принято.", "Поняла. Держим ровно." },
-        [E.Joy]        = new[] { "Ооо да! 🔥", "Вот это победа 😄", "Кайф! Так держать." },
-        [E.Smile]      = new[] { "Тепло 😊", "Улыбка — хороший знак.", "Лампово, понимаю." },
-        [E.Laugh]      = new[] { "Ахаха 😂", "Окей, смешно 😄", "Хороший прикол." },
-        [E.Gratitude]  = new[] { "Принято 🙏", "Спасибо услышала.", "Тёплая благодарность — сила." },
-        [E.Pride]      = new[] { "Вот это характер 💪", "Горжусь твоим усилием.", "Сильный ход." },
-        [E.Interest]   = new[] { "О, это интересно 👀", "Давай копнём глубже.", "Хороший вопрос." },
-        [E.Calm]       = new[] { "Выдох — да ✅", "Спокойный режим.", "Держим контроль." },
-        [E.Sadness]    = new[] { "Я рядом. Тихо.", "Понимаю… это грустно.", "Без давления. Я с тобой." },
-        [E.Suffering]  = new[] { "Окей… это тяжело.", "Давай стабилизируемся шаг за шагом.", "Я рядом, дышим." },
-        [E.Fear]       = new[] { "Сначала безопасность.", "Выдох. Мы справимся.", "Поняла. Снизим шум." },
-        [E.Anger]      = new[] { "Окей. Границы.", "Сделаем паузу и решим.", "Злость — энергия. Направим." },
-        [E.Disgust]    = new[] { "Фу, да.", "Отдаляемся от источника.", "Поняла. Убираем это." },
-        [E.Shame]      = new[] { "Стыд — сигнал, не приговор.", "Мягче к себе.", "Давай без самобичевания." },
-        [E.Guilt]      = new[] { "Принято. Можно исправить.", "Давай разложим, что сделать дальше.", "Окей. Шаг за шагом." },
-        [E.Loneliness] = new[] { "Я рядом. Слышишь?", "Давай поговорим. Ты не один.", "Поняла. Держу рядом." },
-    };
-
-    private static string PickReaction(E e)
-    {
-        if (!ReactionPool.TryGetValue(e, out var arr) || arr.Length == 0)
-            return "Поняла.";
-        return arr[(int)(DateTime.Now.Ticks % arr.Length)];
-    }
-
-    // Генерация обучающих примеров: только внутри своего класса + лёгкие усилители
-    public static (double[] x, int y)[] GenerateSamples(int count, int seed = 42, double noiseStd = 0.02)
+    private static Sample[] GenerateSamples(int count, int seed, double noiseStd)
     {
         var rnd = new Random(seed);
-        var kinds = PhrasePool.Keys.ToArray();
 
-        var data = new (double[] x, int y)[count];
+        // шаблоны для генерации
+        var lex = BuildTemplates();
 
+        var samples = new Sample[count];
         for (int i = 0; i < count; i++)
         {
-            var k = kinds[rnd.Next(kinds.Length)];
-            var phrase = PhrasePool[k][rnd.Next(PhrasePool[k].Length)];
-
-            // лёгкая аугментация (НЕ противоречит метке)
-            phrase = Augment(phrase, k, rnd);
+            // равномерно по классам
+            int y = i % Classes;
+            var phrase = lex[(E)y][rnd.Next(lex[(E)y].Count)];
 
             var x = TextToFeatures(phrase);
 
-            // небольшой гауссов шум (делает устойчивее)
-            for (int j = 0; j < x.Length; j++)
-                x[j] = Clamp01(x[j] + NextGaussian(rnd, 0, noiseStd));
+            // добавим шума на фичи — чтобы не было “табличного” переобучения
+            if (noiseStd > 0)
+            {
+                for (int k = 0; k < x.Length; k++)
+                {
+                    x[k] += NextGaussian(rnd, 0, noiseStd);
+                    if (x[k] < 0) x[k] = 0;
+                    if (x[k] > 1) x[k] = 1;
+                }
+            }
 
-            data[i] = (x, (int)k);
+            samples[i] = new Sample(x, y);
         }
 
-        return data;
+        // перемешаем
+        samples = samples.OrderBy(_ => rnd.Next()).ToArray();
+        return samples;
     }
 
-    private static string Augment(string phrase, E k, Random rnd)
+    private static Dictionary<E, List<string>> BuildTemplates()
     {
-        if (rnd.NextDouble() < 0.25)
-            phrase = AddIntensifier(phrase, rnd);
-
-        if (rnd.NextDouble() < 0.15)
-            phrase = AddPunctuation(phrase, k, rnd);
-
-        if (rnd.NextDouble() < 0.10)
-            phrase = AddEmoji(phrase, k, rnd);
-
-        // “не” — добавляем осторожно и только где уместно (не ломаем метку)
-        if (rnd.NextDouble() < 0.08 && (k == E.Calm || k == E.Neutral || k == E.Sadness))
-            phrase = "не знаю... " + phrase;
-
-        return phrase;
-    }
-
-    private static string AddIntensifier(string s, Random rnd)
-    {
-        var a = new[] { "очень", "реально", "сильно", "прям", "капец", "жесть" };
-        return $"{a[rnd.Next(a.Length)]} {s}";
-    }
-
-    private static string AddPunctuation(string s, E k, Random rnd)
-    {
-        return k switch
+        return new Dictionary<E, List<string>>
         {
-            E.Joy or E.Anger => s + new string('!', 1 + rnd.Next(3)),
-            E.Interest => s + "?",
-            E.Sadness or E.Suffering => s + "...",
-            _ => s
-        };
-    }
+            [E.Neutral] = new() { "ок", "понял", "нормально", "ясно", "ладно", "не знаю", "посмотрим" },
+            [E.Joy] = new() { "ура!", "кайф", "класс!", "я счастлив", "получилось!", "это победа", "огонь!" },
+            [E.Smile] = new() { "привет", "приятно", "улыбаюсь", "тепло", "мило", "уютно" },
+            [E.Laugh] = new() { "ахаха", "ржу", "смешно", "лол", "угар", "оруу" },
+            [E.Gratitude] = new() { "спасибо", "благодарю", "очень ценю", "ты выручила", "признателен" },
+            [E.Pride] = new() { "я горжусь", "я справился", "я сделал это", "выдержал", "смог" },
+            [E.Interest] = new() { "интересно", "как это работает?", "почему так?", "давай разберемся", "есть идея" },
+            [E.Calm] = new() { "я спокоен", "всё тихо", "ровно", "выдох", "пауза", "стабильно" },
 
-    private static string AddEmoji(string s, E k, Random rnd)
-    {
-        return k switch
-        {
-            E.Joy or E.Smile => s + " 😊",
-            E.Laugh => s + " 😂",
-            E.Sadness => s + " 😔",
-            E.Anger => s + " 😡",
-            E.Fear => s + " 😨",
-            _ => s
+            [E.Sadness] = new() { "мне грустно", "печально", "тоскливо", "пусто", "хочется плакать" },
+            [E.Suffering] = new() { "очень тяжело", "нет сил", "больно", "выгорел", "я на пределе" },
+            [E.Fear] = new() { "страшно", "паника", "мне жутко", "это пугает", "опасно" },
+            [E.Anger] = new() { "меня бесит", "я зол", "ненавижу", "достало", "в ярости" },
+            [E.Disgust] = new() { "фу", "противно", "мерзко", "отвратительно", "гадость" },
+            [E.Shame] = new() { "мне стыдно", "неловко", "позор", "я опозорился" },
+            [E.Guilt] = new() { "я виноват", "прости", "извини", "мне совестно", "сожалею" },
+            [E.Loneliness] = new() { "я один", "мне одиноко", "никого рядом", "пусто", "не с кем" }
         };
     }
 
@@ -615,12 +434,13 @@ static class Emotion
     // =========================
     private static Network BuildModel()
     {
+        // Под текущее ядро (Linear + Activation + Softmax сериализуются)
         var net = new Network();
-        net.Add(new LinearLayer(InputSize, 80));
+        net.Add(new LinearLayer(InputSize, 80, seed: 123));
         net.Add(new ActivationLayer(80, ActivationType.ReLu));
-        net.Add(new LinearLayer(80, 48));
+        net.Add(new LinearLayer(80, 48, seed: 124));
         net.Add(new ActivationLayer(48, ActivationType.ReLu));
-        net.Add(new LinearLayer(48, Classes));
+        net.Add(new LinearLayer(48, Classes, seed: 125));
         net.Add(new SoftmaxLayer(Classes));
         return net;
     }
@@ -630,7 +450,7 @@ static class Emotion
     // =========================
     public static void Run()
     {
-        Console.WriteLine("=== TEST: Emotions RU MAX (Softmax) ===");
+        Console.WriteLine("=== TEST: Emotions RU (Softmax) ===");
 
         // 1) dataset
         var samples = GenerateSamples(count: 45000, seed: 10, noiseStd: 0.02);
@@ -640,69 +460,64 @@ static class Emotion
         var train = dataset.Take(dataset.Length - valSize).ToArray();
         var val = dataset.Skip(dataset.Length - valSize).ToArray();
 
-        // 2) path
-        var modelPath = GetModelPath();
-        Directory.CreateDirectory(Path.GetDirectoryName(modelPath)!);
-
+        // 2) load/save по modelName (ядро)
         Network model;
-
-        if (File.Exists(modelPath))
+        try
         {
             Console.WriteLine("Loading existing model...");
-            model = Network.Load(modelPath);
+            model = Network.Load(ModelName);
             Console.WriteLine("Model loaded.\n");
         }
-        else
+        catch
         {
-            model = BuildModel();
             Console.WriteLine("No model found. Training from scratch...\n");
+            model = BuildModel();
         }
 
         // 3) trainer
         var optimizer = new AdamOptimizer(learningRate: 0.0008);
-        ILoss loss = new CrossEntropyLoss();
+        var loss = new CrossEntropyLoss();
         var trainer = new Trainer(model, optimizer, loss);
 
-        // 4) callbacks
-        // Старый Callback печатает accuracy (это Examples и это нормально).
-        // Но Trainer ждёт ITrainCallback, поэтому используем Adapter.
+        // 4) callbacks (accuracy — снаружи, это Examples)
         var eval = val.Take(2000).ToArray();
 
         var callbacks = new ITrainCallback[]
         {
-            new CallbackAdapter(new Callback(model, eval, every: 1))
+            new CallbackAdapter(new Callback(model, eval, every: 1)),
+            // если захочешь стопать по loss — можно добавить:
+            // new EarlyStoppingByLoss(patience: 6, minDelta: 1e-4, useValidationIfAvailable: true)
+        };
+
+        // 5) train options (канон)
+        var options = new TrainOptions
+        {
+            Epochs = 25,
+            BatchSize = 128,
+            Shuffle = true,
+            DropLast = false,
+            GradClipNorm = 5.0,
+            GradientAccumulationSteps = 1,
+            Seed = 42,
+            Validation = val,
+            Callbacks = callbacks
         };
 
         var t0 = DateTime.Now;
-
-        trainer.Train(dataset: dataset, TrainOptions() );
-
+        trainer.Train(train, options);
         var dt = DateTime.Now - t0;
+
         Console.WriteLine($"Training time: {dt.TotalSeconds:F1} sec");
 
-        model.Save(modelPath);
-        Console.WriteLine($"Model saved: {modelPath}\n");
+        model.Save(ModelName);
+        Console.WriteLine($"Model saved: ML/Models/{ModelName}.json\n");
 
-        // 5) interactive
         RunConsoleChat(model);
     }
 
-    private static string GetModelPath()
-    {
-        // 1) если у вас есть Core.Path.ModelPath.Emotion — используем его
-        // 2) иначе пишем в ML.Models/emotion_ru_max относительно рабочей папки
-        try
-        {
-            // если в проекте реально есть такой путь — отлично
-            return Core.Path.ModelPath.Emotion;
-        }
-        catch
-        {
-            var root = Directory.GetCurrentDirectory();
-            return System.IO.Path.Combine(root, "ML.Models", "emotion_ru_max");
-        }
-    }
-
+    // =========================
+    // 9) Console chat
+    // =========================
     private static void RunConsoleChat(Network model)
     {
         Console.WriteLine("=== Console Emotion Chat (RU) ===");
@@ -730,7 +545,7 @@ static class Emotion
                 Console.WriteLine("Команды:");
                 Console.WriteLine("  /exit            - выход");
                 Console.WriteLine("  /top             - toggle top-k");
-                Console.WriteLine("  /top 3|5|8       - установить k");
+                Console.WriteLine("  /top 3|5|8|16    - установить k");
                 Console.WriteLine();
                 continue;
             }
@@ -755,7 +570,7 @@ static class Emotion
             // Safety first
             if (IsSafetyCritical(line))
             {
-                PrintSafetyResponse(line);
+                PrintSafetyResponse();
                 continue;
             }
 
@@ -763,13 +578,11 @@ static class Emotion
             var probs = model.Forward(x, training: false);
 
             int pred = ArgMax(probs);
-            var e = (E)pred;
-
             Console.WriteLine($"Эмоция: {Names[pred]}");
-            Console.WriteLine($"Ответ:  {PickReaction(e)}");
+            Console.WriteLine($"Ответ:  {Response((E)pred)}");
 
             if (showTop)
-                PrintTopK(probs, topK);
+                PrintTop(probs, topK);
 
             Console.WriteLine();
         }
@@ -784,13 +597,33 @@ static class Emotion
         return idx;
     }
 
-    private static void PrintTopK(double[] probs, int k)
+    private static void PrintTop(double[] probs, int k)
     {
-        var top = probs.Select((p, i) => (p, i))
-                       .OrderByDescending(t => t.p)
-                       .Take(k);
+        var pairs = probs.Select((p, i) => (p, i))
+                         .OrderByDescending(t => t.p)
+                         .Take(k);
 
-        foreach (var (p, i) in top)
-            Console.WriteLine($"{Names[i],14}: {p:F3}");
+        foreach (var (p, i) in pairs)
+            Console.WriteLine($"{Names[i],14}: {p:0.000}");
     }
+
+    private static string Response(E e) => e switch
+    {
+        E.Joy => "О, да! Это светлая энергия 🔥",
+        E.Smile => "Тепло поймала 🙂",
+        E.Laugh => "Ахаха, ну ты даёшь 😄",
+        E.Gratitude => "Приняла. Спасибо — это сила 🤍",
+        E.Pride => "Красиво сделал. Это опора 💪",
+        E.Interest => "Хорошо. Давай копать глубже 👀",
+        E.Calm => "Ровно. Так и держим.",
+        E.Sadness => "Слышу. Без давления. Я рядом.",
+        E.Suffering => "Тяжело. Давай маленькими шагами.",
+        E.Fear => "Ок. Сначала безопасность. Что сейчас важнее всего?",
+        E.Anger => "Поняла. Границы. Давай по сути, без разрушений.",
+        E.Disgust => "Фу — честно. Уберём это подальше.",
+        E.Shame => "Стыд часто врёт. Не уничтожай себя.",
+        E.Guilt => "Вина — сигнал. Исправить можно.",
+        E.Loneliness => "Одиночество не навсегда. Я здесь.",
+        _ => "Ок."
+    };
 }
