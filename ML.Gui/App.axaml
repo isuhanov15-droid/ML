@@ -1,0 +1,38 @@
+<Application xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:fluent="clr-namespace:Avalonia.Themes.Fluent;assembly=Avalonia.Themes.Fluent"
+             x:Class="ML.Gui.App"
+             RequestedThemeVariant="Light">
+  <Application.Styles>
+    <fluent:FluentTheme />
+    <Style Selector="TextBlock,Label">
+      <Setter Property="TextElement.Foreground" Value="#EEF1F7"/>
+    </Style>
+    <Style Selector="TextBox">
+      <Setter Property="Foreground" Value="#EEF1F7"/>
+      <Setter Property="Background" Value="#1A1F2A"/>
+      <Setter Property="BorderBrush" Value="#2A3242"/>
+    </Style>
+    <Style Selector="ComboBox">
+      <Setter Property="Foreground" Value="#EEF1F7"/>
+      <Setter Property="Background" Value="#1A1F2A"/>
+      <Setter Property="BorderBrush" Value="#2A3242"/>
+    </Style>
+    <Style Selector="CheckBox">
+      <Setter Property="Foreground" Value="#EEF1F7"/>
+    </Style>
+    <Style Selector="Button">
+      <Setter Property="Foreground" Value="#F6F8FC"/>
+      <Setter Property="Background" Value="#243045"/>
+      <Setter Property="BorderBrush" Value="#2F3B50"/>
+    </Style>
+    <Style Selector="Menu, MenuItem">
+      <Setter Property="Foreground" Value="#000000ff"/>
+    </Style>
+    <Style Selector="DataGrid">
+      <Setter Property="Foreground" Value="#EEF1F7"/>
+      <Setter Property="Background" Value="#0F1115"/>
+      <Setter Property="BorderBrush" Value="#1F2633"/>
+    </Style>
+  </Application.Styles>
+</Application>

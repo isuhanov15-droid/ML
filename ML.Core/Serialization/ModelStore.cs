@@ -19,7 +19,16 @@ public static class ModelStore
     public static void Save(string modelName, Network network)
     {
         if (string.IsNullOrWhiteSpace(modelName)) throw new ArgumentException("modelName is empty");
+        string dir = ResolveModelsDir();
+        Directory.CreateDirectory(dir);
+        string path = System.IO.Path.Combine(dir, $"{modelName}.json");
+        SaveToFile(path, network);
+    }
+
+    public static void SaveToFile(string filePath, Network network)
+    {
         if (network == null) throw new ArgumentNullException(nameof(network));
+        if (string.IsNullOrWhiteSpace(filePath)) throw new ArgumentException("filePath is empty");
 
         var dto = new NetworkDto();
 
@@ -60,11 +69,11 @@ public static class ModelStore
             }
         }
 
-        string dir = ResolveModelsDir();
-        Directory.CreateDirectory(dir);
+        var dir = System.IO.Path.GetDirectoryName(filePath);
+        if (!string.IsNullOrWhiteSpace(dir))
+            Directory.CreateDirectory(dir);
 
-        string path = System.IO.Path.Combine(dir, $"{modelName}.json");
-        File.WriteAllText(path, JsonSerializer.Serialize(dto, JsonOptions));
+        File.WriteAllText(filePath, JsonSerializer.Serialize(dto, JsonOptions));
     }
 
     public static Network Load(string modelName)
@@ -74,10 +83,17 @@ public static class ModelStore
         string dir = ResolveModelsDir();
         string path = System.IO.Path.Combine(dir, $"{modelName}.json");
 
-        if (!File.Exists(path))
-            throw new FileNotFoundException($"Model file not found: {path}");
+        return LoadFromFile(path);
+    }
 
-        var dto = JsonSerializer.Deserialize<NetworkDto>(File.ReadAllText(path))
+    public static Network LoadFromFile(string filePath)
+    {
+        if (string.IsNullOrWhiteSpace(filePath)) throw new ArgumentException("filePath is empty");
+
+        if (!File.Exists(filePath))
+            throw new FileNotFoundException($"Model file not found: {filePath}");
+
+        var dto = JsonSerializer.Deserialize<NetworkDto>(File.ReadAllText(filePath))
                   ?? throw new InvalidOperationException("Invalid model json.");
 
         var net = new Network();

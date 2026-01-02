@@ -7,6 +7,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ML.Core", "ML.Core\ML.Core.
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ML.Examples", "ML.Examples\ML.Examples.csproj", "{943C1913-DE0F-4183-B13D-6F32E8601B40}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ML.Gui", "ML.Gui\ML.Gui.csproj", "{0ECBEE55-1A1D-45A4-B604-96423B6AD7CC}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -24,5 +26,9 @@ Global
 		{943C1913-DE0F-4183-B13D-6F32E8601B40}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{943C1913-DE0F-4183-B13D-6F32E8601B40}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{943C1913-DE0F-4183-B13D-6F32E8601B40}.Release|Any CPU.Build.0 = Release|Any CPU
+		{0ECBEE55-1A1D-45A4-B604-96423B6AD7CC}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{0ECBEE55-1A1D-45A4-B604-96423B6AD7CC}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{0ECBEE55-1A1D-45A4-B604-96423B6AD7CC}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{0ECBEE55-1A1D-45A4-B604-96423B6AD7CC}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal

@@ -13,3 +13,7 @@ obj/
 # OS
 .DS_Store
 Thumbs.db
+
+# Local dotnet cache (used in this repo to avoid home permission issues)
+/.dotnet/
+/.nuget/

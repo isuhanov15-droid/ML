@@ -1,0 +1,207 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:vm="using:ML.Gui.ViewModels"
+        xmlns:lvc="clr-namespace:LiveChartsCore.SkiaSharpView.Avalonia;assembly=LiveChartsCore.SkiaSharpView.Avalonia"
+        x:Class="ML.Gui.Views.MainWindow"
+        Title="ML Trainer Dashboard"
+        Width="1280" Height="820"
+        Background="#0F1115"
+        mc:Ignorable="d">
+  <Design.DataContext>
+    <vm:MainViewModel/>
+  </Design.DataContext>
+
+  <Grid RowDefinitions="Auto,Auto,*" ColumnDefinitions="*">
+    <!-- Меню -->
+    <Menu Grid.Row="0" Background="#161920" Foreground="#E5E5E5">
+      <MenuItem Header="_Файл">
+        <MenuItem Header="Сохранить модель" Command="{Binding Training.SaveModelCommand}"/>
+        <MenuItem Header="Загрузить модель" Command="{Binding Training.LoadModelCommand}"/>
+      </MenuItem>
+      <MenuItem Header="_Вид">
+        <MenuItem Header="Тёмная тема (по умолчанию)" IsEnabled="False"/>
+      </MenuItem>
+      <MenuItem Header="_Справка">
+        <MenuItem Header="Demo: XOR датасет" IsEnabled="False"/>
+      </MenuItem>
+    </Menu>
+
+    <!-- Заголовок / статус -->
+    <Border Grid.Row="1" Background="#11141B" Padding="16" BorderBrush="#1F2633" BorderThickness="0,0,0,1">
+      <DockPanel>
+        <StackPanel Orientation="Vertical" DockPanel.Dock="Left">
+          <TextBlock Text="ML Trainer Dashboard" Foreground="White" FontSize="22" FontWeight="Bold"/>
+          <TextBlock Text="Управление обучением, метрики, модели" Foreground="#9BA5B5" FontSize="13"/>
+        </StackPanel>
+        <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
+          <Border Background="#1E2938" Padding="8,4" CornerRadius="6">
+            <TextBlock Text="{Binding Training.Status}" Foreground="#E5E5E5"/>
+          </Border>
+          <Border Background="#17202D" Padding="8,4" CornerRadius="6">
+            <TextBlock Text="Demo: XOR" Foreground="#9BA5B5"/>
+          </Border>
+        </StackPanel>
+      </DockPanel>
+    </Border>
+
+    <!-- Основная зона -->
+    <Grid Grid.Row="2" ColumnDefinitions="360,*" RowDefinitions="*">
+      <!-- Левая панель -->
+      <ScrollViewer Grid.Column="0" Padding="16" Background="#0F1115">
+        <StackPanel Spacing="14">
+          <TextBlock Text="Данные" FontWeight="Bold" FontSize="16" Foreground="#E5E5E5"/>
+          <StackPanel Orientation="Vertical" Spacing="6">
+            <TextBlock Text="Dataset path (для справки)" FontSize="12" Foreground="#6C7687"/>
+            <TextBox Text="{Binding Training.DatasetPath}" Watermark="path/to/dataset.csv"/>
+          </StackPanel>
+
+          <TextBlock Text="Модель" FontWeight="Bold" FontSize="16" Foreground="#E5E5E5" Margin="0,4,0,0"/>
+          <UniformGrid Columns="2" Rows="2" Margin="0,4,0,0">
+            <StackPanel>
+              <TextBlock Text="Input size" Foreground="#C7CEDB"/>
+              <TextBox Text="{Binding Training.InputSize}"/>
+            </StackPanel>
+            <StackPanel Margin="8,0,0,0">
+              <TextBlock Text="Output size" Foreground="#C7CEDB"/>
+              <TextBox Text="{Binding Training.OutputSize}"/>
+            </StackPanel>
+            <StackPanel>
+              <TextBlock Text="Hidden sizes" Foreground="#C7CEDB"/>
+              <TextBox Text="{Binding Training.HiddenSizes}" Watermark="4,8,4"/>
+            </StackPanel>
+            <StackPanel Margin="8,0,0,0">
+              <TextBlock Text="Activation" Foreground="#C7CEDB"/>
+              <ComboBox ItemsSource="{Binding Training.ActivationOptions}"
+                        SelectedItem="{Binding Training.Activation}"/>
+            </StackPanel>
+          </UniformGrid>
+
+          <TextBlock Text="Оптимизатор (Adam)" FontWeight="Bold" FontSize="16" Foreground="#E5E5E5" Margin="0,4,0,0"/>
+          <UniformGrid Columns="2" Rows="2" Margin="0,4,0,0">
+            <StackPanel>
+              <TextBlock Text="Learning rate" Foreground="#C7CEDB"/>
+              <TextBox Text="{Binding Training.LearningRate}"/>
+            </StackPanel>
+            <StackPanel Margin="8,0,0,0">
+              <TextBlock Text="Grad clip norm" Foreground="#C7CEDB"/>
+              <TextBox Text="{Binding Training.GradClipNorm}"/>
+            </StackPanel>
+            <StackPanel>
+              <TextBlock Text="Seed (optional)" Foreground="#C7CEDB"/>
+              <TextBox Text="{Binding Training.Seed}"/>
+            </StackPanel>
+          </UniformGrid>
+
+          <TextBlock Text="Обучение" FontWeight="Bold" FontSize="16" Foreground="#E5E5E5" Margin="0,4,0,0"/>
+          <UniformGrid Columns="2" Rows="2" Margin="0,4,0,0">
+            <StackPanel>
+              <TextBlock Text="Epochs" Foreground="#C7CEDB"/>
+              <TextBox Text="{Binding Training.EpochsCount}"/>
+            </StackPanel>
+            <StackPanel Margin="8,0,0,0">
+              <TextBlock Text="Batch size" Foreground="#C7CEDB"/>
+              <TextBox Text="{Binding Training.BatchSize}"/>
+            </StackPanel>
+            <StackPanel>
+              <TextBlock Text="Accum steps" Foreground="#C7CEDB"/>
+              <TextBox Text="{Binding Training.AccumulationSteps}"/>
+            </StackPanel>
+            <StackPanel Margin="8,0,0,0">
+              <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Bottom">
+                <CheckBox Content="Shuffle" IsChecked="{Binding Training.Shuffle}"/>
+                <CheckBox Content="Drop last" IsChecked="{Binding Training.DropLast}"/>
+              </StackPanel>
+            </StackPanel>
+          </UniformGrid>
+
+          <StackPanel Orientation="Horizontal" Spacing="8">
+            <Button Content="Start" Command="{Binding Training.StartCommand}" Width="140"/>
+            <Button Content="Stop" Command="{Binding Training.StopCommand}" Width="140"/>
+          </StackPanel>
+
+          <TextBlock Text="Модель: сохранение/загрузка" FontWeight="Bold" FontSize="16" Foreground="#E5E5E5" Margin="0,8,0,0"/>
+          <StackPanel Orientation="Vertical" Spacing="6">
+            <StackPanel Orientation="Horizontal" Spacing="8">
+              <TextBlock Text="Имя модели" Width="120" VerticalAlignment="Center" Foreground="#C7CEDB"/>
+              <TextBox Width="200" Text="{Binding Training.ModelName}" Watermark="model_name"/>
+            </StackPanel>
+            <StackPanel Orientation="Horizontal" Spacing="8">
+              <TextBlock Text="Сохранить в" Width="120" VerticalAlignment="Center" Foreground="#C7CEDB"/>
+              <TextBox Width="320" Text="{Binding Training.SavePath}" Watermark="(пусто = ML/Models/&lt;name&gt;.json)"/>
+              <Button Content="..." Width="32" Click="OnBrowseSave"/>
+              <Button Content="Save" Command="{Binding Training.SaveModelCommand}" Width="80"/>
+            </StackPanel>
+            <StackPanel Orientation="Horizontal" Spacing="8">
+              <TextBlock Text="Загрузить из" Width="120" VerticalAlignment="Center" Foreground="#C7CEDB"/>
+              <TextBox Width="320" Text="{Binding Training.LoadPath}" Watermark="(пусто = ML/Models/&lt;name&gt;.json)"/>
+              <Button Content="..." Width="32" Click="OnBrowseLoad"/>
+              <Button Content="Load" Command="{Binding Training.LoadModelCommand}" Width="80"/>
+            </StackPanel>
+          </StackPanel>
+
+          <TextBlock Text="По умолчанию настроен демонстрационный XOR. Подключите свой пайплайн в MainWindow.axaml.cs." FontSize="12" Foreground="#6C7687"/>
+        </StackPanel>
+      </ScrollViewer>
+
+      <!-- Правая панель -->
+      <Grid Grid.Column="1" Background="#0B0E13" RowDefinitions="Auto,Auto,*" Margin="8,0,0,0">
+        <!-- Карточки статуса -->
+        <UniformGrid Columns="3" Rows="1" Margin="0,0,0,12">
+          <Border Background="#161B23" CornerRadius="8" Padding="12" Margin="0,0,8,0">
+            <StackPanel>
+              <TextBlock Text="Learning rate" Foreground="#9BA5B5" FontSize="12"/>
+              <TextBlock Text="{Binding Training.LearningRate}" Foreground="#E5E5E5" FontSize="18" FontWeight="Bold"/>
+            </StackPanel>
+          </Border>
+          <Border Background="#161B23" CornerRadius="8" Padding="12" Margin="0,0,8,0">
+            <StackPanel>
+              <TextBlock Text="Epochs planned" Foreground="#9BA5B5" FontSize="12"/>
+              <TextBlock Text="{Binding Training.EpochsCount}" Foreground="#E5E5E5" FontSize="18" FontWeight="Bold"/>
+            </StackPanel>
+          </Border>
+          <Border Background="#161B23" CornerRadius="8" Padding="12">
+            <StackPanel>
+              <TextBlock Text="Batch size" Foreground="#9BA5B5" FontSize="12"/>
+              <TextBlock Text="{Binding Training.BatchSize}" Foreground="#E5E5E5" FontSize="18" FontWeight="Bold"/>
+            </StackPanel>
+          </Border>
+        </UniformGrid>
+
+        <!-- График -->
+        <Border Grid.Row="1" Background="#11141B" CornerRadius="10" Padding="12" BorderBrush="#1F2633" BorderThickness="1">
+          <StackPanel Spacing="6">
+            <TextBlock Text="Loss curve" Foreground="#E5E5E5" FontWeight="Bold"/>
+            <lvc:CartesianChart Series="{Binding Training.Series}"
+                                XAxes="{Binding Training.XAxes}"
+                                YAxes="{Binding Training.YAxes}"
+                                Height="260"
+                                LegendPosition="Right" />
+          </StackPanel>
+        </Border>
+
+        <!-- Таблица -->
+        <Border Grid.Row="2" Background="#0F1115" CornerRadius="10" Padding="12" BorderBrush="#1F2633" BorderThickness="1" Margin="0,12,0,0">
+          <StackPanel Spacing="8">
+            <TextBlock Text="Эпохи" Foreground="#E5E5E5" FontWeight="Bold"/>
+            <DataGrid ItemsSource="{Binding Training.Epochs}"
+                      AutoGenerateColumns="False"
+                      GridLinesVisibility="All"
+                      HeadersVisibility="All"
+                      Height="320"
+                      Background="#0F1115"
+                      BorderBrush="#1F2633"
+                      Foreground="#E5E5E5">
+              <DataGrid.Columns>
+                <DataGridTextColumn Header="Epoch" Binding="{Binding Epoch}" Width="60"/>
+                <DataGridTextColumn Header="Train loss" Binding="{Binding TrainLoss, StringFormat=F4}" Width="*"/>
+                <DataGridTextColumn Header="Val loss" Binding="{Binding ValLoss, StringFormat=F4}" Width="*"/>
+              </DataGrid.Columns>
+            </DataGrid>
+          </StackPanel>
+        </Border>
+      </Grid>
+    </Grid>
+  </Grid>
+</Window>

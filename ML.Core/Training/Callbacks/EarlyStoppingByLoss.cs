@@ -46,6 +46,7 @@ public sealed class EarlyStoppingByLoss : ITrainCallback
         if (_badEpochs >= _patience)
         {
             _onStop?.Invoke();
+            r.RequestStop();
         }
     }
 }
