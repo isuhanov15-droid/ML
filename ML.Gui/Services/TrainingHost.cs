@@ -25,10 +25,13 @@ public sealed class TrainingHost
 
     private Network? _preloadedNetwork;
     private Network? _currentNetwork;
+    private (double[] x, int y)[]? _evalData;
 
     public bool IsConfigured => _trainerFactory != null && _trainProvider != null && _networkFactory != null;
     public bool IsRunning => _runTask is { IsCompleted: false };
     public Network? CurrentNetwork => _currentNetwork;
+    public Func<IEnumerable<(double[] x, int y)>>? CurrentTrainProvider => _trainProvider;
+    public Func<IEnumerable<(double[] x, int y)>?>? CurrentValProvider => _valProvider;
 
     public void Configure(
         Func<Network> networkFactory,
@@ -40,6 +43,15 @@ public sealed class TrainingHost
         _trainerFactory = trainerFactory ?? throw new ArgumentNullException(nameof(trainerFactory));
         _trainProvider = trainProvider ?? throw new ArgumentNullException(nameof(trainProvider));
         _valProvider = valProvider;
+    }
+
+    public void SetDataProviders(
+        Func<IEnumerable<(double[] x, int y)>> trainProvider,
+        Func<IEnumerable<(double[] x, int y)>?>? valProvider = null)
+    {
+        _trainProvider = trainProvider ?? throw new ArgumentNullException(nameof(trainProvider));
+        _valProvider = valProvider;
+        _evalData = null;
     }
 
     public Task StartAsync(TrainOptions options, Action<TrainEpochResult> onEpoch, CancellationToken externalCt)
@@ -54,14 +66,16 @@ public sealed class TrainingHost
         var callbacks = BuildCallbacks(options.Callbacks, onEpoch);
         var effectiveOptions = CloneOptions(options, callbacks);
 
-        _runTask = Task.Run(() =>
+        _runTask = Task.Factory.StartNew(() =>
         {
             _currentNetwork = _preloadedNetwork ?? _networkFactory!();
             _preloadedNetwork = null;
 
             var trainer = _trainerFactory!(_currentNetwork);
-            var trainData = _trainProvider!();
-            var valData = _valProvider?.Invoke();
+            var trainData = _trainProvider!().ToArray();
+            var valData = _valProvider?.Invoke()?.ToArray();
+
+            _evalData = valData ?? trainData;
 
             // override validation if provided at runtime
             if (valData != null)
@@ -80,8 +94,8 @@ public sealed class TrainingHost
                 };
             }
 
-            trainer.Train(trainData, effectiveOptions);
-        }, _cts.Token);
+            trainer.Train(trainData, effectiveOptions, _cts.Token);
+        }, _cts.Token, TaskCreationOptions.LongRunning, TaskScheduler.Default);
 
         return _runTask;
     }
@@ -89,11 +103,43 @@ public sealed class TrainingHost
     public void Stop()
     {
         _stopRequested = true;
-        _cts?.Cancel();
+            _cts?.Cancel();
+    }
+
+    public double? ComputeAccuracy()
+    {
+        var data = _evalData;
+        var model = _currentNetwork;
+        if (data == null || data.Length == 0 || model == null)
+            return null;
+
+        int ok = 0;
+        int total = data.Length;
+
+        foreach (var (x, y) in data)
+        {
+            var p = model.Forward(x, training: false);
+            int pred = ArgMax(p);
+            if (pred == y) ok++;
+        }
+
+        return total == 0 ? null : (double)ok / total;
+    }
+
+    private static int ArgMax(double[] v)
+    {
+        int idx = 0;
+        double max = v[0];
+        for (int i = 1; i < v.Length; i++)
+            if (v[i] > max) { max = v[i]; idx = i; }
+        return idx;
     }
 
     public void SaveModel(string modelName, string? filePath = null)
     {
+        if (_currentNetwork == null)
+            _currentNetwork = _preloadedNetwork ?? _networkFactory?.Invoke();
+
         if (_currentNetwork == null)
             throw new InvalidOperationException("Нет активной модели для сохранения. Запустите обучение или загрузите модель.");
 
@@ -109,6 +155,7 @@ public sealed class TrainingHost
             ? ModelStore.LoadFromFile(filePath)
             : ModelStore.Load(modelName);
         _currentNetwork = _preloadedNetwork;
+        _evalData = null;
     }
 
     private IEnumerable<ITrainCallback> BuildCallbacks(IEnumerable<ITrainCallback>? existing, Action<TrainEpochResult> onEpoch)

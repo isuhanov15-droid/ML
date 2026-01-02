@@ -29,7 +29,7 @@ public sealed class Trainer
     /// Ядро считает только Loss (train + optional val).
     /// Метрики (accuracy) — снаружи (Examples).
     /// </summary>
-    public void Train(IEnumerable<(double[] x, int y)> dataset, TrainOptions options)
+    public void Train(IEnumerable<(double[] x, int y)> dataset, TrainOptions options, CancellationToken cancellationToken = default)
     {
         if (dataset == null) throw new ArgumentNullException(nameof(dataset));
         if (options == null) throw new ArgumentNullException(nameof(options));
@@ -61,6 +61,8 @@ public sealed class Trainer
 
         for (int epoch = 1; epoch <= options.Epochs; epoch++)
         {
+            cancellationToken.ThrowIfCancellationRequested();
+
             if (options.Shuffle)
                 Shuffle(indices, rnd);
 
@@ -76,6 +78,8 @@ public sealed class Trainer
 
             for (int start = 0; start < indices.Length; start += batchSize)
             {
+                cancellationToken.ThrowIfCancellationRequested();
+
                 int end = System.Math.Min(start + batchSize, indices.Length);
                 int actualBatch = end - start;
 
@@ -85,6 +89,8 @@ public sealed class Trainer
                 // 1) копим градиенты по батчу
                 for (int t = start; t < end; t++)
                 {
+                    cancellationToken.ThrowIfCancellationRequested();
+
                     var (x, y) = trainData[indices[t]];
 
                     var output = _model.Forward(x, training: true);
@@ -134,7 +140,7 @@ public sealed class Trainer
             // Val loss (средний) — только loss, без метрик
             double? valLoss = null;
             if (valData != null && valData.Length > 0)
-                valLoss = EvaluateLoss(valData);
+                valLoss = EvaluateLoss(valData, cancellationToken);
 
             var result = new TrainEpochResult(epoch, trainLoss, valLoss);
 
@@ -151,13 +157,15 @@ public sealed class Trainer
         }
     }
 
-    private double EvaluateLoss((double[] x, int y)[] data)
+    private double EvaluateLoss((double[] x, int y)[] data, CancellationToken cancellationToken)
     {
         double sum = 0.0;
         int n = 0;
 
         foreach (var (x, y) in data)
         {
+            cancellationToken.ThrowIfCancellationRequested();
+
             var output = _model.Forward(x, training: false);
             double lossValue = _loss.Forward(output, y);
 

@@ -11,6 +11,7 @@ using LiveChartsCore.SkiaSharpView;
 using LiveChartsCore.SkiaSharpView.Painting;
 using ML.Core;
 using ML.Core.Layers;
+using ML.Gui.Examples;
 using ML.Core.Losses;
 using ML.Core.Optimizers;
 using ML.Core.Serialization;
@@ -47,9 +48,14 @@ public sealed class TrainingViewModel : ViewModelBase
     private string _modelName = "demo_model";
     private string _savePath = "";
     private string _loadPath = "";
+    private int _epochDisplayEvery = 1;
+    private ExamplePreset? _selectedPreset;
 
     private readonly ObservableCollection<double> _trainLossValues = new();
     private readonly ObservableCollection<double?> _valLossValues = new();
+    private Task? _runningTask;
+    private const int MaxEpochRows = 500;
+    private string _logText = "";
 
     public TrainingViewModel()
     {
@@ -57,6 +63,7 @@ public sealed class TrainingViewModel : ViewModelBase
         StopCommand = new RelayCommand(Stop, () => IsRunning);
         SaveModelCommand = new RelayCommand(SaveModel, () => !IsRunning);
         LoadModelCommand = new RelayCommand(LoadModel, () => !IsRunning);
+        ApplyPresetCommand = new RelayCommand(() => { if (SelectedPreset != null) ApplyPreset(SelectedPreset); });
 
         Series = new ISeries[]
         {
@@ -80,9 +87,28 @@ public sealed class TrainingViewModel : ViewModelBase
 
         XAxes = new[] { new Axis { Name = "Epoch", MinLimit = 1 } };
         YAxes = new[] { new Axis { Name = "Loss" } };
+
+        // default preset
+        SelectedPreset = Presets.FirstOrDefault();
     }
 
     public ObservableCollection<EpochViewModel> Epochs { get; } = new();
+    public ObservableCollection<string> Logs { get; } = new();
+    public string LogText
+    {
+        get => _logText;
+        private set => SetField(ref _logText, value);
+    }
+    public IReadOnlyList<ExamplePreset> Presets { get; } = ExampleRegistry.Presets;
+    public ExamplePreset? SelectedPreset
+    {
+        get => _selectedPreset;
+        set
+        {
+            if (SetField(ref _selectedPreset, value) && value != null)
+                ApplyPreset(value);
+        }
+    }
 
     public bool IsRunning
     {
@@ -206,10 +232,17 @@ public sealed class TrainingViewModel : ViewModelBase
     public void SetSavePath(string path) => SavePath = path;
     public void SetLoadPath(string path) => LoadPath = path;
 
+    public int EpochDisplayEvery
+    {
+        get => _epochDisplayEvery;
+        set => SetField(ref _epochDisplayEvery, value <= 0 ? 1 : value);
+    }
+
     public AsyncRelayCommand StartCommand { get; }
     public RelayCommand StopCommand { get; }
     public RelayCommand SaveModelCommand { get; }
     public RelayCommand LoadModelCommand { get; }
+    public RelayCommand ApplyPresetCommand { get; }
 
     public ISeries[] Series { get; }
     public Axis[] XAxes { get; }
@@ -225,6 +258,23 @@ public sealed class TrainingViewModel : ViewModelBase
         Func<IEnumerable<(double[] x, int y)>?>? valProvider = null)
     {
         _host.Configure(networkFactory, trainerFactory, trainProvider, valProvider);
+    }
+
+    private void ApplyPreset(ExamplePreset preset)
+    {
+        InputSize = preset.InputSize;
+        OutputSize = preset.OutputSize;
+        HiddenSizes = preset.HiddenSizes;
+        Activation = preset.Activation;
+        LearningRate = preset.LearningRate;
+        EpochsCount = preset.Epochs;
+        BatchSize = preset.BatchSize;
+        AccumulationSteps = preset.Accumulation;
+        Shuffle = preset.Shuffle;
+        DropLast = preset.DropLast;
+        Seed = Seed; // keep user seed
+
+        _host.SetDataProviders(preset.TrainProvider, preset.ValProvider);
     }
 
     public Network BuildNetworkFromState()
@@ -275,18 +325,24 @@ public sealed class TrainingViewModel : ViewModelBase
         return sizes.Length == 0 ? new[] { 4 } : sizes;
     }
 
-    private async Task StartAsync()
+    private Task StartAsync()
     {
+        if (_runningTask is { IsCompleted: false })
+        {
+            Status = "Уже идёт обучение.";
+            return Task.CompletedTask;
+        }
+
         if (!_host.IsConfigured)
         {
             Status = "Нет конфигурации тренировки: вызовите Configure(...) из кода.";
-            return;
+            return Task.CompletedTask;
         }
 
         if (EpochsCount <= 0 || BatchSize <= 0 || AccumulationSteps <= 0 || InputSize <= 0 || OutputSize <= 0)
         {
             Status = "Проверьте размеры и Epochs/BatchSize/AccumSteps (>0).";
-            return;
+            return Task.CompletedTask;
         }
 
         ResetProgress();
@@ -295,26 +351,27 @@ public sealed class TrainingViewModel : ViewModelBase
 
         _sessionCts = new CancellationTokenSource();
 
-        try
+        var options = BuildOptions();
+        _runningTask = _host.StartAsync(options, OnEpoch, _sessionCts.Token);
+
+        _ = _runningTask.ContinueWith(t =>
         {
-            var options = BuildOptions();
-            await _host.StartAsync(options, OnEpoch, _sessionCts.Token);
-            Status = "Обучение завершено.";
-        }
-        catch (OperationCanceledException)
-        {
-            Status = "Остановлено.";
-        }
-        catch (Exception ex)
-        {
-            Status = $"Ошибка: {ex.Message}";
-        }
-        finally
-        {
-            IsRunning = false;
-            _sessionCts?.Dispose();
-            _sessionCts = null;
-        }
+            Dispatcher.UIThread.Post(() =>
+            {
+                if (t.IsCanceled)
+                    Status = "Остановлено.";
+                else if (t.IsFaulted)
+                    Status = $"Ошибка: {t.Exception?.GetBaseException().Message}";
+                else
+                    Status = "Обучение завершено.";
+
+                IsRunning = false;
+                _sessionCts?.Dispose();
+                _sessionCts = null;
+            });
+        });
+
+        return Task.CompletedTask;
     }
 
     private void Stop()
@@ -343,6 +400,7 @@ public sealed class TrainingViewModel : ViewModelBase
         try
         {
             _host.LoadModel(ModelName, string.IsNullOrWhiteSpace(LoadPath) ? null : LoadPath);
+            ApplyLoadedNetwork();
             Status = $"Загружена модель: {(string.IsNullOrWhiteSpace(LoadPath) ? ModelName : LoadPath)}";
         }
         catch (Exception ex)
@@ -351,10 +409,44 @@ public sealed class TrainingViewModel : ViewModelBase
         }
     }
 
+    private void ApplyLoadedNetwork()
+    {
+        var net = _host.CurrentNetwork;
+        if (net == null) return;
+
+        var linears = net.Layers.OfType<LinearLayer>().ToList();
+        if (linears.Count > 0)
+        {
+            InputSize = linears.First().InputSize;
+            OutputSize = linears.Last().OutputSize;
+            var hidden = linears.Skip(1).Take(linears.Count - 2).Select(l => l.OutputSize).ToArray();
+            HiddenSizes = hidden.Length > 0 ? string.Join(",", hidden) : "";
+        }
+
+        var firstActivation = net.Layers.OfType<ActivationLayer>().FirstOrDefault();
+        if (firstActivation != null)
+            Activation = firstActivation.Type;
+    }
+
     private void OnEpoch(TrainEpochResult r)
     {
+        bool shouldDisplay = r.Epoch == 1 || EpochDisplayEvery <= 1 || (r.Epoch % EpochDisplayEvery == 0);
+        if (!shouldDisplay) return;
+
+        var acc = _host.ComputeAccuracy();
+
         Dispatcher.UIThread.Post(() =>
         {
+            // ограничиваем длину таблицы/серий
+            if (Epochs.Count >= MaxEpochRows)
+                Epochs.RemoveAt(0);
+            if (_trainLossValues.Count >= MaxEpochRows)
+                _trainLossValues.RemoveAt(0);
+            if (_valLossValues.Count >= MaxEpochRows)
+                _valLossValues.RemoveAt(0);
+            if (Logs.Count >= MaxEpochRows)
+                Logs.RemoveAt(0);
+
             Epochs.Add(new EpochViewModel
             {
                 Epoch = r.Epoch,
@@ -366,6 +458,11 @@ public sealed class TrainingViewModel : ViewModelBase
             _valLossValues.Add(r.ValLoss);
 
             Status = $"Эпоха {r.Epoch}: loss={r.TrainLoss:F4}" + (r.ValLoss.HasValue ? $" | val={r.ValLoss:F4}" : "");
+
+            var accText = acc.HasValue ? acc.Value.ToString("F4") : "n/a";
+            var line = $"Epoch {r.Epoch}: Accuracy={accText}, TrainLoss={r.TrainLoss:F4}" + (r.ValLoss.HasValue ? $", ValLoss={r.ValLoss:F4}" : "");
+            Logs.Add(line);
+            LogText = string.Join(Environment.NewLine, Logs);
         });
     }
 

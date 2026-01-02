@@ -12,6 +12,8 @@
       <Setter Property="Foreground" Value="#EEF1F7"/>
       <Setter Property="Background" Value="#1A1F2A"/>
       <Setter Property="BorderBrush" Value="#2A3242"/>
+      <Setter Property="SelectionBrush" Value="#4B89FF"/>
+      <Setter Property="CaretBrush" Value="#F6F8FC"/>
     </Style>
     <Style Selector="ComboBox">
       <Setter Property="Foreground" Value="#EEF1F7"/>
@@ -23,8 +25,9 @@
     </Style>
     <Style Selector="Button">
       <Setter Property="Foreground" Value="#F6F8FC"/>
-      <Setter Property="Background" Value="#243045"/>
+      <Setter Property="Background" Value="#2C3A52"/>
       <Setter Property="BorderBrush" Value="#2F3B50"/>
+      <Setter Property="Padding" Value="10,6"/>
     </Style>
     <Style Selector="Menu, MenuItem">
       <Setter Property="Foreground" Value="#000000ff"/>
