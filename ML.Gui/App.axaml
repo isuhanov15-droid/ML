@@ -14,23 +14,80 @@
       <Setter Property="BorderBrush" Value="#2A3242"/>
       <Setter Property="SelectionBrush" Value="#4B89FF"/>
       <Setter Property="CaretBrush" Value="#F6F8FC"/>
+      <Setter Property="Padding" Value="8,6"/>
+      <Setter Property="Margin" Value="0,2,12,2"/>
     </Style>
     <Style Selector="ComboBox">
       <Setter Property="Foreground" Value="#EEF1F7"/>
       <Setter Property="Background" Value="#1A1F2A"/>
       <Setter Property="BorderBrush" Value="#2A3242"/>
+      <Setter Property="Padding" Value="8,4"/>
+      <Setter Property="Margin" Value="0,2,12,2"/>
+    </Style>
+    <Style Selector="ComboBoxItem">
+      <Setter Property="Foreground" Value="#EEF1F7"/>
+      <Setter Property="Background" Value="#1A1F2A"/>
+      <Setter Property="Padding" Value="8,4"/>
+    </Style>
+    <Style Selector="ComboBoxItem:pointerover">
+      <Setter Property="Background" Value="#23304A"/>
+    </Style>
+    <Style Selector="ComboBoxItem:selected">
+      <Setter Property="Background" Value="#2F3B58"/>
+      <Setter Property="Foreground" Value="#F6F8FC"/>
     </Style>
     <Style Selector="CheckBox">
       <Setter Property="Foreground" Value="#EEF1F7"/>
+    </Style>
+    <Style Selector="CheckBox:checked /template/ TextBlock#PART_TextBlock">
+      <Setter Property="Foreground" Value="#F6F8FC"/>
+    </Style>
+    <Style Selector="CheckBox:disabled /template/ TextBlock#PART_TextBlock">
+      <Setter Property="Foreground" Value="#7A8496"/>
+    </Style>
+    <Style Selector="CheckBox /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Foreground" Value="#EEF1F7"/>
+    </Style>
+    <Style Selector="CheckBox:checked /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Foreground" Value="#F6F8FC"/>
+    </Style>
+    <Style Selector="CheckBox:disabled /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Foreground" Value="#7A8496"/>
     </Style>
     <Style Selector="Button">
       <Setter Property="Foreground" Value="#F6F8FC"/>
       <Setter Property="Background" Value="#2C3A52"/>
       <Setter Property="BorderBrush" Value="#2F3B50"/>
       <Setter Property="Padding" Value="10,6"/>
+      <Setter Property="Margin" Value="0,2,8,2"/>
     </Style>
-    <Style Selector="Menu, MenuItem">
-      <Setter Property="Foreground" Value="#000000ff"/>
+    <Style Selector="Button:pointerover">
+      <Setter Property="Background" Value="#35507A"/>
+    </Style>
+    <Style Selector="Button:pressed">
+      <Setter Property="Background" Value="#2A3E60"/>
+    </Style>
+    <Style Selector="Menu">
+      <Setter Property="Background" Value="#161920"/>
+      <Setter Property="Foreground" Value="#E5E5E5"/>
+    </Style>
+    <Style Selector="MenuItem">
+      <Setter Property="Foreground" Value="#E5E5E5"/>
+      <Setter Property="Background" Value="Transparent"/>
+      <Setter Property="Padding" Value="12,6"/>
+    </Style>
+    <Style Selector="MenuItem /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Foreground" Value="#E5E5E5"/>
+    </Style>
+    <Style Selector="MenuItem /template/ Border#PART_PopupBorder">
+      <Setter Property="Background" Value="#161920"/>
+      <Setter Property="BorderBrush" Value="#2A3242"/>
+    </Style>
+    <Style Selector="MenuItem:pointerover">
+      <Setter Property="Background" Value="#23304A"/>
+    </Style>
+    <Style Selector="MenuItem:pressed">
+      <Setter Property="Background" Value="#2D3E5C"/>
     </Style>
     <Style Selector="DataGrid">
       <Setter Property="Foreground" Value="#EEF1F7"/>
@@ -38,4 +95,11 @@
       <Setter Property="BorderBrush" Value="#1F2633"/>
     </Style>
   </Application.Styles>
+  <Application.Resources>
+    <ResourceDictionary>
+      <ResourceDictionary.MergedDictionaries>
+        <ResourceInclude Source="avares://ML.Gui/Styles/Charts.axaml" />
+      </ResourceDictionary.MergedDictionaries>
+    </ResourceDictionary>
+  </Application.Resources>
 </Application>

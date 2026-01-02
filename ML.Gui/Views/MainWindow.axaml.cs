@@ -2,10 +2,13 @@ using System.Linq;
 using Avalonia.Controls;
 using Avalonia.Markup.Xaml;
 using Avalonia.Platform.Storage;
+using Avalonia.Threading;
+using LiveChartsCore.Drawing;
+using LiveChartsCore.SkiaSharpView;
+using LiveChartsCore.SkiaSharpView.Drawing;
 using ML.Core.Losses;
 using ML.Core.Optimizers;
 using ML.Core.Training;
-using ML.Gui.Services;
 using ML.Gui.ViewModels;
 
 namespace ML.Gui.Views;
@@ -30,14 +33,16 @@ public partial class MainWindow : Window
         if (_configured) return;
         if (DataContext is not MainViewModel vm) return;
 
+        var preset = vm.Training.SelectedPreset ?? vm.Training.Presets.First();
         vm.Training.Configure(
             networkFactory: () => vm.Training.BuildNetworkFromState(),
             trainerFactory: net => new Trainer(net, new AdamOptimizer(vm.Training.LearningRate), new CrossEntropyLoss()),
-            trainProvider: () => DemoPipelines.XorData,
-            valProvider: () => DemoPipelines.XorData // для демонстрации — те же данные
+            trainProvider: () => preset.BuildTrain(vm.Training.DatasetPath),
+            valProvider: () => preset.BuildVal(vm.Training.DatasetPath)
         );
 
         _configured = true;
+        Dispatcher.UIThread.Post(ApplyChartStyles);
     }
 
     private async void OnBrowseSave(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
@@ -57,6 +62,25 @@ public partial class MainWindow : Window
         var path = file?.TryGetLocalPath();
         if (!string.IsNullOrWhiteSpace(path))
             vm.Training.SetSavePath(path);
+    }
+
+    private async void OnBrowseDataset(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        if (DataContext is not MainViewModel vm) return;
+
+        var files = await StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
+        {
+            Title = "Выберите датасет (CSV/JSON)",
+            AllowMultiple = false,
+            FileTypeFilter = new[]
+            {
+                new FilePickerFileType("CSV/JSON") { Patterns = new[] { "*.csv", "*.json", "*.jsonl" } }
+            }
+        });
+
+        var path = files?.FirstOrDefault()?.TryGetLocalPath();
+        if (!string.IsNullOrWhiteSpace(path))
+            vm.Training.DatasetPath = path;
     }
 
     private async void OnBrowseLoad(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
@@ -119,6 +143,51 @@ public partial class MainWindow : Window
         {
             vm.Training.SetLoadPath(path);
             vm.Training.LoadModelCommand.Execute(null);
+        }
+    }
+
+    private async void OnBrowseInferenceModel(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        if (DataContext is not MainViewModel vm) return;
+
+        var files = await StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
+        {
+            Title = "Загрузить модель для инференса",
+            AllowMultiple = false,
+            FileTypeFilter = new[]
+            {
+                new FilePickerFileType("Model json") { Patterns = new[] { "*.json" } }
+            }
+        });
+
+        var path = files?.FirstOrDefault()?.TryGetLocalPath();
+        if (!string.IsNullOrWhiteSpace(path))
+            vm.Inference.ModelPath = path;
+    }
+
+    private void ApplyChartStyles()
+    {
+        if (LossChart?.Series == null)
+            return;
+
+        var trainStroke = this.FindResource("ChartTrainStroke") as IPaint<SkiaSharpDrawingContext>;
+        var valStroke = this.FindResource("ChartValStroke") as IPaint<SkiaSharpDrawingContext>;
+
+        foreach (var series in LossChart.Series)
+        {
+            switch (series)
+            {
+                case LineSeries<double> train:
+                    train.GeometrySize = 6;
+                    train.Fill = null;
+                    if (trainStroke != null) train.Stroke = trainStroke;
+                    break;
+                case LineSeries<double?> val:
+                    val.GeometrySize = 6;
+                    val.Fill = null;
+                    if (valStroke != null) val.Stroke = valStroke;
+                    break;
+            }
         }
     }
 }

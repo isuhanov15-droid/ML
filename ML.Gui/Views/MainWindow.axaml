@@ -3,10 +3,12 @@
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:vm="using:ML.Gui.ViewModels"
-        xmlns:lvc="clr-namespace:LiveChartsCore.SkiaSharpView.Avalonia;assembly=LiveChartsCore.SkiaSharpView.Avalonia"
+        xmlns:lvc="clr-namespace:LiveChartsCore.SkiaSharpView;assembly=LiveChartsCore.SkiaSharpView"
+        xmlns:lvcAvalonia="clr-namespace:LiveChartsCore.SkiaSharpView.Avalonia;assembly=LiveChartsCore.SkiaSharpView.Avalonia"
+        xmlns:res="using:ML.Gui.Resources"
         x:Class="ML.Gui.Views.MainWindow"
-        Title="ML Trainer Dashboard"
-        Width="1280" Height="820"
+        Title="{x:Static res:UiStrings.AppTitle}"
+        Width="1280" Height="840"
         Background="#0F1115"
         mc:Ignorable="d">
   <Design.DataContext>
@@ -15,16 +17,16 @@
 
   <Grid RowDefinitions="Auto,Auto,*" ColumnDefinitions="*">
     <!-- Меню -->
-    <Menu Grid.Row="0" Background="#161920" Foreground="#E5E5E5">
-      <MenuItem Header="_Файл">
-        <MenuItem Header="Сохранить модель" Command="{Binding Training.SaveModelCommand}"/>
-        <MenuItem Header="Загрузить модель" Command="{Binding Training.LoadModelCommand}"/>
+    <Menu Grid.Row="0">
+      <MenuItem Header="{x:Static res:UiStrings.MenuFile}">
+        <MenuItem Header="{x:Static res:UiStrings.MenuSaveModel}" Command="{Binding Training.SaveModelCommand}"/>
+        <MenuItem Header="{x:Static res:UiStrings.MenuLoadModel}" Command="{Binding Training.LoadModelCommand}"/>
       </MenuItem>
-      <MenuItem Header="_Вид">
-        <MenuItem Header="Тёмная тема (по умолчанию)" IsEnabled="False"/>
+      <MenuItem Header="{x:Static res:UiStrings.MenuView}">
+        <MenuItem Header="{x:Static res:UiStrings.MenuTheme}" IsEnabled="False"/>
       </MenuItem>
-      <MenuItem Header="_Справка">
-        <MenuItem Header="Demo: XOR датасет" IsEnabled="False"/>
+      <MenuItem Header="{x:Static res:UiStrings.MenuHelp}">
+        <MenuItem Header="{x:Static res:UiStrings.MenuDemo}" IsEnabled="False"/>
       </MenuItem>
     </Menu>
 
@@ -32,17 +34,23 @@
     <Border Grid.Row="1" Background="#11141B" Padding="16" BorderBrush="#1F2633" BorderThickness="0,0,0,1">
       <DockPanel>
         <StackPanel Orientation="Vertical" DockPanel.Dock="Left">
-          <TextBlock Text="ML Trainer Dashboard" Foreground="White" FontSize="22" FontWeight="Bold"/>
-          <TextBlock Text="Управление обучением, метрики, модели" Foreground="#9BA5B5" FontSize="13"/>
+          <TextBlock Text="{x:Static res:UiStrings.AppTitle}" Foreground="White" FontSize="22" FontWeight="Bold"/>
+          <TextBlock Text="{x:Static res:UiStrings.AppSubtitle}" Foreground="#9BA5B5" FontSize="13"/>
         </StackPanel>
-        <StackPanel Orientation="Horizontal" Spacing="10" HorizontalAlignment="Right">
-          <Button Content="Start" Command="{Binding Training.StartCommand}" MinWidth="90" Padding="10,6"/>
-          <Button Content="Stop" Command="{Binding Training.StopCommand}" MinWidth="90" Padding="10,6"/>
-          <Border Background="#1E2938" Padding="8,4" CornerRadius="6">
-            <TextBlock Text="{Binding Training.Status}" Foreground="#E5E5E5"/>
+        <StackPanel Orientation="Horizontal" Spacing="10" DockPanel.Dock="Right" VerticalAlignment="Center">
+          <Button Content="{x:Static res:UiStrings.Start}" Command="{Binding Training.StartCommand}" MinWidth="100" Padding="10,6"/>
+          <Button Content="{x:Static res:UiStrings.Stop}" Command="{Binding Training.StopCommand}" MinWidth="100" Padding="10,6"/>
+          <Border Background="#1E2938" Padding="8,6" CornerRadius="6" Width="220">
+            <StackPanel Spacing="2">
+              <TextBlock Text="{x:Static res:UiStrings.Status}" Foreground="#9BA5B5" FontSize="11"/>
+              <TextBlock Text="{Binding Training.Status}" Foreground="#E5E5E5" TextTrimming="CharacterEllipsis"/>
+            </StackPanel>
           </Border>
-          <Border Background="#17202D" Padding="8,4" CornerRadius="6">
-            <TextBlock Text="Demo: XOR" Foreground="#9BA5B5"/>
+          <Border Background="#17202D" Padding="8,6" CornerRadius="6" MinWidth="120">
+            <StackPanel Spacing="2">
+              <TextBlock Text="{x:Static res:UiStrings.Elapsed}" Foreground="#9BA5B5" FontSize="11"/>
+              <TextBlock Text="{Binding Training.ElapsedText}" Foreground="#E5E5E5"/>
+            </StackPanel>
           </Border>
         </StackPanel>
       </DockPanel>
@@ -50,137 +58,152 @@
 
     <!-- Основная зона -->
     <TabControl Grid.Row="2" Background="#0F1115">
-      <TabItem Header="Конфигурация">
+      <TabItem Header="{x:Static res:UiStrings.TabConfig}">
         <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
           <Border Padding="12">
-            <StackPanel Spacing="10">
-              <TextBlock Text="Данные" FontWeight="Bold" FontSize="16" Foreground="#E5E5E5"/>
-              <TextBox Width="320" HorizontalAlignment="Left" Text="{Binding Training.DatasetPath}" Watermark="path/to/dataset.csv"/>
-              <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-                <TextBlock Text="Пример" Foreground="#C7CEDB" Width="80"/>
-                <ComboBox Width="180" ItemsSource="{Binding Training.Presets}" SelectedItem="{Binding Training.SelectedPreset}">
-                  <ComboBox.ItemTemplate>
-                    <DataTemplate>
-                      <TextBlock Text="{Binding Name}" />
-                    </DataTemplate>
-                  </ComboBox.ItemTemplate>
-                </ComboBox>
-                <Button Content="Применить" Command="{Binding Training.ApplyPresetCommand}" Width="90"/>
-              </StackPanel>
-              <Border Height="1" Background="#1F2633" Margin="0,8,0,8"/>
+            <StackPanel Spacing="12">
+              <StackPanel Spacing="6">
+                <TextBlock Text="{x:Static res:UiStrings.DataTitle}" FontWeight="Bold" FontSize="16" Foreground="#E5E5E5"/>
+                <Grid ColumnDefinitions="170,*,100" RowDefinitions="Auto,Auto">
+                  <TextBlock Grid.Row="0" Grid.Column="0" Text="{x:Static res:UiStrings.DatasetPath}" Foreground="#C7CEDB" VerticalAlignment="Center"/>
+                  <TextBox Grid.Row="0" Grid.Column="1" Text="{Binding Training.DatasetPath}" Watermark="dataset.csv / dataset.json"/>
+                  <Button Grid.Row="0" Grid.Column="2" Content="{x:Static res:UiStrings.Browse}" Click="OnBrowseDataset" HorizontalAlignment="Left" Width="80"/>
 
-              <StackPanel Spacing="12">
-                <TextBlock Text="Модель" FontWeight="Bold" FontSize="16" Foreground="#E5E5E5"/>
+                  <TextBlock Grid.Row="1" Grid.Column="0" Text="{x:Static res:UiStrings.Example}" Foreground="#C7CEDB" VerticalAlignment="Center"/>
+                  <ComboBox Grid.Row="1" Grid.Column="1" ItemsSource="{Binding Training.Presets}" SelectedItem="{Binding Training.SelectedPreset}">
+                    <ComboBox.ItemTemplate>
+                      <DataTemplate>
+                        <StackPanel>
+                          <TextBlock Text="{Binding Name}" />
+                          <TextBlock Text="{Binding Description}" Foreground="#8FA0B8" FontSize="11"/>
+                        </StackPanel>
+                      </DataTemplate>
+                    </ComboBox.ItemTemplate>
+                  </ComboBox>
+                  <Button Grid.Row="1" Grid.Column="2" Content="{x:Static res:UiStrings.Apply}" Command="{Binding Training.ApplyPresetCommand}" Width="80"/>
+                </Grid>
+                <TextBlock Text="{x:Static res:UiStrings.CustomDataset}" FontSize="12" Foreground="#6C7687"/>
+              </StackPanel>
+
+              <Border Height="1" Background="#1F2633" Margin="0,4,0,4"/>
+
+              <StackPanel Spacing="8">
+                <TextBlock Text="{x:Static res:UiStrings.ModelTitle}" FontWeight="Bold" FontSize="16" Foreground="#E5E5E5"/>
                 <UniformGrid Columns="4" Rows="1" Margin="0,4,0,0" HorizontalAlignment="Left">
-                  <StackPanel Width="120" HorizontalAlignment="Left" Margin="0,0,8,0">
-                    <TextBlock Text="Input" Foreground="#C7CEDB"/>
-                    <TextBox Width="110" Text="{Binding Training.InputSize}"/>
+                  <StackPanel Width="140" Margin="0,0,8,0">
+                    <TextBlock Text="{x:Static res:UiStrings.Input}" Foreground="#C7CEDB"/>
+                    <TextBox Text="{Binding Training.InputSize}"/>
                   </StackPanel>
-                  <StackPanel Width="120" HorizontalAlignment="Left" Margin="0,0,8,0">
-                    <TextBlock Text="Output" Foreground="#C7CEDB"/>
-                    <TextBox Width="110" Text="{Binding Training.OutputSize}"/>
+                  <StackPanel Width="140" Margin="0,0,8,0">
+                    <TextBlock Text="{x:Static res:UiStrings.Output}" Foreground="#C7CEDB"/>
+                    <TextBox Text="{Binding Training.OutputSize}"/>
                   </StackPanel>
-                  <StackPanel Width="140" HorizontalAlignment="Left" Margin="0,0,8,0">
-                    <TextBlock Text="Hidden" Foreground="#C7CEDB"/>
-                    <TextBox Width="130" Text="{Binding Training.HiddenSizes}" Watermark="4,8,4"/>
+                  <StackPanel Width="160" Margin="0,0,8,0">
+                    <TextBlock Text="{x:Static res:UiStrings.Hidden}" Foreground="#C7CEDB"/>
+                    <TextBox Text="{Binding Training.HiddenSizes}" Watermark="4,8,4"/>
                   </StackPanel>
-                  <StackPanel Width="140" HorizontalAlignment="Left">
-                    <TextBlock Text="Activation" Foreground="#C7CEDB"/>
-                    <ComboBox Width="130" ItemsSource="{Binding Training.ActivationOptions}"
+                  <StackPanel Width="160">
+                    <TextBlock Text="{x:Static res:UiStrings.Activation}" Foreground="#C7CEDB"/>
+                    <ComboBox ItemsSource="{Binding Training.ActivationOptions}"
                               SelectedItem="{Binding Training.Activation}"/>
                   </StackPanel>
                 </UniformGrid>
-                <Border Height="1" Background="#1F2633" Margin="0,6,0,6"/>
+              </StackPanel>
 
-                <TextBlock Text="Обучение" FontWeight="Bold" FontSize="16" Foreground="#E5E5E5"/>
-                <StackPanel Orientation="Horizontal" Spacing="10" HorizontalAlignment="Left">
-                  <StackPanel Width="120" HorizontalAlignment="Left" Margin="0,0,8,0">
-                    <TextBlock Text="Epochs" Foreground="#C7CEDB"/>
-                    <TextBox Width="110" Text="{Binding Training.EpochsCount}"/>
-                  </StackPanel>
-                  <StackPanel Width="120" HorizontalAlignment="Left" Margin="0,0,8,0">
-                    <TextBlock Text="Batch" Foreground="#C7CEDB"/>
-                    <TextBox Width="110" Text="{Binding Training.BatchSize}"/>
-                  </StackPanel>
-                  <StackPanel Width="120" HorizontalAlignment="Left" Margin="0,0,8,0">
-                    <TextBlock Text="Accum" Foreground="#C7CEDB"/>
-                    <TextBox Width="110" Text="{Binding Training.AccumulationSteps}"/>
-                  </StackPanel>
-                  <StackPanel Width="160" HorizontalAlignment="Left" Margin="0,0,8,0">
-                    <TextBlock Text="Каждую N эпоху" Foreground="#C7CEDB"/>
-                    <TextBox Width="90" Text="{Binding Training.EpochDisplayEvery}"/>
-                  </StackPanel>
-                  <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Bottom" HorizontalAlignment="Left">
-                    <CheckBox Content="Shuffle" IsChecked="{Binding Training.Shuffle}"/>
-                    <CheckBox Content="Drop" IsChecked="{Binding Training.DropLast}"/>
-                  </StackPanel>
-                </StackPanel>
-                <Border Height="1" Background="#1F2633" Margin="0,6,0,6"/>
+              <Border Height="1" Background="#1F2633" Margin="0,6,0,6"/>
 
-                <TextBlock Text="Оптимизатор (Adam)" FontWeight="Bold" FontSize="16" Foreground="#E5E5E5"/>
-                <StackPanel Orientation="Horizontal" Spacing="10" HorizontalAlignment="Left">
-                  <StackPanel Width="110" HorizontalAlignment="Left">
-                    <TextBlock Text="LR" Foreground="#C7CEDB"/>
-                    <TextBox Width="100" Text="{Binding Training.LearningRate}"/>
+              <StackPanel Spacing="8">
+                <TextBlock Text="{x:Static res:UiStrings.TrainingTitle}" FontWeight="Bold" FontSize="16" Foreground="#E5E5E5"/>
+                <UniformGrid Columns="4" Rows="1" HorizontalAlignment="Left">
+                  <StackPanel Width="140" Margin="0,0,8,0">
+                    <TextBlock Text="{x:Static res:UiStrings.Epochs}" Foreground="#C7CEDB"/>
+                    <TextBox Text="{Binding Training.EpochsCount}"/>
                   </StackPanel>
-                  <StackPanel Width="110" HorizontalAlignment="Left">
-                    <TextBlock Text="Grad clip" Foreground="#C7CEDB"/>
-                    <TextBox Width="100" Text="{Binding Training.GradClipNorm}"/>
+                  <StackPanel Width="140" Margin="0,0,8,0">
+                    <TextBlock Text="{x:Static res:UiStrings.Batch}" Foreground="#C7CEDB"/>
+                    <TextBox Text="{Binding Training.BatchSize}"/>
                   </StackPanel>
-                  <StackPanel Width="110" HorizontalAlignment="Left">
-                    <TextBlock Text="Seed" Foreground="#C7CEDB"/>
-                    <TextBox Width="100" Text="{Binding Training.Seed}"/>
+                  <StackPanel Width="140" Margin="0,0,8,0">
+                    <TextBlock Text="{x:Static res:UiStrings.Accumulation}" Foreground="#C7CEDB"/>
+                    <TextBox Text="{Binding Training.AccumulationSteps}"/>
                   </StackPanel>
-                </StackPanel>
-                <Border Height="1" Background="#1F2633" Margin="0,6,0,6"/>
-
-                <TextBlock Text="Сохранение/загрузка" FontWeight="Bold" FontSize="16" Foreground="#E5E5E5"/>
-                <StackPanel Orientation="Vertical" Spacing="6">
-                  <StackPanel Orientation="Horizontal" Spacing="8">
-                    <TextBlock Text="Имя" Width="60" VerticalAlignment="Center" Foreground="#C7CEDB"/>
-                    <TextBox Width="180" Text="{Binding Training.ModelName}" Watermark="model_name"/>
+                  <StackPanel Width="160" Margin="0,0,8,0">
+                    <TextBlock Text="{x:Static res:UiStrings.EpochEvery}" Foreground="#C7CEDB"/>
+                    <TextBox Text="{Binding Training.EpochDisplayEvery}"/>
                   </StackPanel>
-                  <StackPanel Orientation="Horizontal" Spacing="8">
-                    <TextBlock Text="Сохранить" Width="80" VerticalAlignment="Center" Foreground="#C7CEDB"/>
-                    <TextBox Width="240" Text="{Binding Training.SavePath}" Watermark="(пусто = ML/Models/&lt;name&gt;.json)"/>
-                    <Button Content="..." Width="28" Click="OnBrowseSave"/>
-                    <Button Content="Save" Command="{Binding Training.SaveModelCommand}" Width="70"/>
-                  </StackPanel>
-                  <StackPanel Orientation="Horizontal" Spacing="8">
-                    <TextBlock Text="Загрузить" Width="80" VerticalAlignment="Center" Foreground="#C7CEDB"/>
-                    <TextBox Width="240" Text="{Binding Training.LoadPath}" Watermark="(пусто = ML/Models/&lt;name&gt;.json)"/>
-                    <Button Content="..." Width="28" Click="OnBrowseLoad"/>
-                    <Button Content="Load" Command="{Binding Training.LoadModelCommand}" Width="70"/>
-                  </StackPanel>
+                </UniformGrid>
+                <StackPanel Orientation="Horizontal" Spacing="12">
+                  <CheckBox Content="{x:Static res:UiStrings.Shuffle}" IsChecked="{Binding Training.Shuffle}"/>
+                  <CheckBox Content="{x:Static res:UiStrings.DropLast}" IsChecked="{Binding Training.DropLast}"/>
                 </StackPanel>
               </StackPanel>
 
-              <TextBlock Text="По умолчанию настроен демонстрационный XOR. Подключите свой пайплайн в MainWindow.axaml.cs." FontSize="12" Foreground="#6C7687"/>
+              <Border Height="1" Background="#1F2633" Margin="0,6,0,6"/>
+
+              <StackPanel Spacing="8">
+                <TextBlock Text="{x:Static res:UiStrings.OptimizerTitle}" FontWeight="Bold" FontSize="16" Foreground="#E5E5E5"/>
+                <UniformGrid Columns="3" Rows="1" HorizontalAlignment="Left">
+                  <StackPanel Width="120">
+                    <TextBlock Text="{x:Static res:UiStrings.LearningRate}" Foreground="#C7CEDB"/>
+                    <TextBox Text="{Binding Training.LearningRate}"/>
+                  </StackPanel>
+                  <StackPanel Width="120">
+                    <TextBlock Text="{x:Static res:UiStrings.GradClip}" Foreground="#C7CEDB"/>
+                    <TextBox Text="{Binding Training.GradClipNorm}"/>
+                  </StackPanel>
+                  <StackPanel Width="120">
+                    <TextBlock Text="{x:Static res:UiStrings.Seed}" Foreground="#C7CEDB"/>
+                    <TextBox Text="{Binding Training.Seed}"/>
+                  </StackPanel>
+                </UniformGrid>
+              </StackPanel>
+
+              <Border Height="1" Background="#1F2633" Margin="0,6,0,6"/>
+
+              <StackPanel Spacing="8">
+                <TextBlock Text="{x:Static res:UiStrings.SaveTitle}" FontWeight="Bold" FontSize="16" Foreground="#E5E5E5"/>
+                <Grid ColumnDefinitions="140,*,90,90" RowDefinitions="Auto,Auto,Auto">
+                  <TextBlock Grid.Row="0" Grid.Column="0" Text="{x:Static res:UiStrings.ModelName}" VerticalAlignment="Center" Foreground="#C7CEDB"/>
+                  <TextBox Grid.Row="0" Grid.Column="1" Text="{Binding Training.ModelName}" Watermark="model_name"/>
+
+                  <TextBlock Grid.Row="1" Grid.Column="0" Text="{x:Static res:UiStrings.SavePath}" VerticalAlignment="Center" Foreground="#C7CEDB"/>
+                  <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding Training.SavePath}" Watermark="(пусто = ML/Models/&lt;name&gt;.json)"/>
+                  <Button Grid.Row="1" Grid.Column="2" Content="{x:Static res:UiStrings.Browse}" Click="OnBrowseSave"/>
+                  <Button Grid.Row="1" Grid.Column="3" Content="{x:Static res:UiStrings.Save}" Command="{Binding Training.SaveModelCommand}"/>
+
+                  <TextBlock Grid.Row="2" Grid.Column="0" Text="{x:Static res:UiStrings.LoadPath}" VerticalAlignment="Center" Foreground="#C7CEDB"/>
+                  <TextBox Grid.Row="2" Grid.Column="1" Text="{Binding Training.LoadPath}" Watermark="(пусто = ML/Models/&lt;name&gt;.json)"/>
+                  <Button Grid.Row="2" Grid.Column="2" Content="{x:Static res:UiStrings.Browse}" Click="OnBrowseLoad"/>
+                  <Button Grid.Row="2" Grid.Column="3" Content="{x:Static res:UiStrings.Load}" Command="{Binding Training.LoadModelCommand}"/>
+                </Grid>
+              </StackPanel>
+
+              <TextBlock Text="По умолчанию доступны демо-примеры (XOR/AND/порог). Загрузите свой датасет или модель для работы с реальными данными." FontSize="12" Foreground="#6C7687"/>
             </StackPanel>
           </Border>
         </ScrollViewer>
       </TabItem>
 
-      <TabItem Header="Метрики">
+      <TabItem Header="{x:Static res:UiStrings.TabMetrics}">
         <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
           <Border Padding="12">
             <StackPanel Spacing="12">
               <UniformGrid Columns="3" Rows="1" Margin="0,0,0,8">
                 <Border Background="#161B23" CornerRadius="8" Padding="12" Margin="0,0,8,0">
                   <StackPanel>
-                    <TextBlock Text="Learning rate" Foreground="#9BA5B5" FontSize="12"/>
+                    <TextBlock Text="{x:Static res:UiStrings.LearningRateCard}" Foreground="#9BA5B5" FontSize="12"/>
                     <TextBlock Text="{Binding Training.LearningRate}" Foreground="#E5E5E5" FontSize="18" FontWeight="Bold"/>
                   </StackPanel>
                 </Border>
                 <Border Background="#161B23" CornerRadius="8" Padding="12" Margin="0,0,8,0">
                   <StackPanel>
-                    <TextBlock Text="Epochs planned" Foreground="#9BA5B5" FontSize="12"/>
+                    <TextBlock Text="{x:Static res:UiStrings.EpochsPlanned}" Foreground="#9BA5B5" FontSize="12"/>
                     <TextBlock Text="{Binding Training.EpochsCount}" Foreground="#E5E5E5" FontSize="18" FontWeight="Bold"/>
                   </StackPanel>
                 </Border>
                 <Border Background="#161B23" CornerRadius="8" Padding="12">
                   <StackPanel>
-                    <TextBlock Text="Batch size" Foreground="#9BA5B5" FontSize="12"/>
+                    <TextBlock Text="{x:Static res:UiStrings.BatchSize}" Foreground="#9BA5B5" FontSize="12"/>
                     <TextBlock Text="{Binding Training.BatchSize}" Foreground="#E5E5E5" FontSize="18" FontWeight="Bold"/>
                   </StackPanel>
                 </Border>
@@ -189,18 +212,30 @@
               <Grid ColumnDefinitions="2*,*" RowDefinitions="*">
                 <Border Grid.Column="0" Background="#121722" CornerRadius="10" Padding="12" BorderBrush="#1F2633" BorderThickness="1" Margin="0,0,10,0">
                   <StackPanel Spacing="6">
-                    <TextBlock Text="Loss curve" Foreground="#E5E5E5" FontWeight="Bold"/>
-                    <lvc:CartesianChart Series="{Binding Training.Series}"
-                                        XAxes="{Binding Training.XAxes}"
-                                        YAxes="{Binding Training.YAxes}"
-                                        Height="360"
-                                        LegendPosition="Right" />
+                    <TextBlock Text="{x:Static res:UiStrings.LossCurve}" Foreground="#E5E5E5" FontWeight="Bold"/>
+                    <lvcAvalonia:CartesianChart x:Name="LossChart"
+                                                Series="{Binding Training.Series}"
+                                                Height="360"
+                                                LegendPosition="Right"
+                                                LegendTextPaint="{StaticResource ChartAxisPaint}">
+                      <lvcAvalonia:CartesianChart.XAxes>
+                        <lvc:Axis Name="Эпоха"
+                                  MinLimit="1"
+                                  LabelsPaint="{StaticResource ChartAxisPaint}"
+                                  SeparatorsPaint="{StaticResource ChartGridPaint}" />
+                      </lvcAvalonia:CartesianChart.XAxes>
+                      <lvcAvalonia:CartesianChart.YAxes>
+                        <lvc:Axis Name="Потеря"
+                                  LabelsPaint="{StaticResource ChartAxisPaint}"
+                                  SeparatorsPaint="{StaticResource ChartGridPaint}" />
+                      </lvcAvalonia:CartesianChart.YAxes>
+                    </lvcAvalonia:CartesianChart>
                   </StackPanel>
                 </Border>
 
                 <Border Grid.Column="1" Background="#11161F" CornerRadius="10" Padding="12" BorderBrush="#1F2633" BorderThickness="1">
                   <StackPanel Spacing="8">
-                    <TextBlock Text="Logs / Accuracy" Foreground="#E5E5E5" FontWeight="Bold"/>
+                    <TextBlock Text="{x:Static res:UiStrings.Logs}" Foreground="#E5E5E5" FontWeight="Bold"/>
                     <ScrollViewer VerticalScrollBarVisibility="Auto" Height="360">
                       <TextBox Text="{Binding Training.LogText}"
                                AcceptsReturn="True"
@@ -213,6 +248,42 @@
                   </StackPanel>
                 </Border>
               </Grid>
+            </StackPanel>
+          </Border>
+        </ScrollViewer>
+      </TabItem>
+
+      <TabItem Header="{x:Static res:UiStrings.TabInference}">
+        <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
+          <Border Padding="12">
+            <StackPanel Spacing="12">
+              <TextBlock Text="{x:Static res:UiStrings.InferenceTitle}" FontWeight="Bold" FontSize="16" Foreground="#E5E5E5"/>
+
+              <Grid ColumnDefinitions="170,*,110,120" RowDefinitions="Auto,Auto,Auto">
+                <TextBlock Grid.Row="0" Grid.Column="0" Text="{x:Static res:UiStrings.ModelPathLabel}" Foreground="#C7CEDB" VerticalAlignment="Center"/>
+                <TextBox Grid.Row="0" Grid.Column="1" Text="{Binding Inference.ModelPath}" Watermark="model.json"/>
+                <Button Grid.Row="0" Grid.Column="2" Content="{x:Static res:UiStrings.Browse}" Click="OnBrowseInferenceModel"/>
+                <Button Grid.Row="0" Grid.Column="3" Content="{x:Static res:UiStrings.Load}" Command="{Binding Inference.LoadModelCommand}"/>
+
+                <TextBlock Grid.Row="1" Grid.Column="0" Text="{x:Static res:UiStrings.InputVector}" Foreground="#C7CEDB" VerticalAlignment="Center"/>
+                <TextBox Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="3" Text="{Binding Inference.InputText}" Watermark="0.1, 0.2, 0.3"/>
+
+                <TextBlock Grid.Row="2" Grid.Column="0" Text="{x:Static res:UiStrings.OutputVector}" Foreground="#C7CEDB" VerticalAlignment="Top"/>
+                <TextBox Grid.Row="2" Grid.Column="1" Grid.ColumnSpan="3" Text="{Binding Inference.OutputText}" AcceptsReturn="True" IsReadOnly="True" Height="100"/>
+              </Grid>
+
+              <Grid ColumnDefinitions="170,*" RowDefinitions="Auto">
+                <TextBlock Grid.Column="0" Text="{x:Static res:UiStrings.Latency}" Foreground="#C7CEDB"/>
+                <TextBlock Grid.Column="1" Text="{Binding Inference.LatencyText}" Foreground="#E5E5E5"/>
+              </Grid>
+
+              <StackPanel Orientation="Horizontal" Spacing="10">
+                <Button Content="{x:Static res:UiStrings.RunOnce}" Command="{Binding Inference.RunOnceCommand}" MinWidth="140"/>
+                <Button Content="{x:Static res:UiStrings.StartMonitor}" Command="{Binding Inference.StartMonitorCommand}" MinWidth="180"/>
+                <Button Content="{x:Static res:UiStrings.StopMonitor}" Command="{Binding Inference.StopMonitorCommand}" MinWidth="160"/>
+              </StackPanel>
+
+              <TextBlock Text="{Binding Inference.Status}" Foreground="#9BA5B5"/>
             </StackPanel>
           </Border>
         </ScrollViewer>

@@ -103,7 +103,7 @@ public sealed class TrainingHost
     public void Stop()
     {
         _stopRequested = true;
-            _cts?.Cancel();
+        _cts?.Cancel();
     }
 
     public double? ComputeAccuracy()

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Diagnostics;
 using System.Globalization;
 using System.Linq;
 using System.Threading;
@@ -8,19 +9,14 @@ using System.Threading.Tasks;
 using Avalonia.Threading;
 using LiveChartsCore;
 using LiveChartsCore.SkiaSharpView;
-using LiveChartsCore.SkiaSharpView.Painting;
 using ML.Core;
+using ML.Core.Examples;
 using ML.Core.Layers;
-using ML.Gui.Examples;
-using ML.Core.Losses;
-using ML.Core.Optimizers;
 using ML.Core.Serialization;
 using ML.Core.Training;
-using ML.Core.Training.Callbacks;
 using ML.Gui.Models;
 using ML.Gui.Services;
 using ML.Gui.Utils;
-using SkiaSharp;
 
 namespace ML.Gui.ViewModels;
 
@@ -29,9 +25,9 @@ public sealed class TrainingViewModel : ViewModelBase
     private readonly TrainingHost _host = new();
     private CancellationTokenSource? _sessionCts;
 
-    private bool _isRunning;
+    private TrainingState _state = TrainingState.Idle;
     private string _status = "Готов";
-    private string _datasetPath = "Demo XOR встроенный датасет";
+    private string _datasetPath = "";
     private int _epochs = 50;
     private int _batchSize = 4;
     private int _accumulationSteps = 1;
@@ -56,13 +52,16 @@ public sealed class TrainingViewModel : ViewModelBase
     private Task? _runningTask;
     private const int MaxEpochRows = 500;
     private string _logText = "";
+    private readonly Stopwatch _stopwatch = new();
+    private DispatcherTimer? _elapsedTimer;
+    private string _elapsedText = "00:00:00";
 
     public TrainingViewModel()
     {
-        StartCommand = new AsyncRelayCommand(StartAsync, () => !IsRunning);
-        StopCommand = new RelayCommand(Stop, () => IsRunning);
-        SaveModelCommand = new RelayCommand(SaveModel, () => !IsRunning);
-        LoadModelCommand = new RelayCommand(LoadModel, () => !IsRunning);
+        StartCommand = new AsyncRelayCommand(StartAsync, () => CanStart);
+        StopCommand = new RelayCommand(Stop, () => CanStop);
+        SaveModelCommand = new RelayCommand(SaveModel, () => !IsBusy);
+        LoadModelCommand = new RelayCommand(LoadModel, () => !IsBusy);
         ApplyPresetCommand = new RelayCommand(() => { if (SelectedPreset != null) ApplyPreset(SelectedPreset); });
 
         Series = new ISeries[]
@@ -70,23 +69,14 @@ public sealed class TrainingViewModel : ViewModelBase
             new LineSeries<double>
             {
                 Name = "Train loss",
-                Values = _trainLossValues,
-                Fill = null,
-                GeometrySize = 6,
-                Stroke = new SolidColorPaint(SKColors.DeepSkyBlue, 3)
+                Values = _trainLossValues
             },
             new LineSeries<double?>
             {
                 Name = "Val loss",
-                Values = _valLossValues,
-                Fill = null,
-                GeometrySize = 6,
-                Stroke = new SolidColorPaint(SKColors.Orange, 3)
+                Values = _valLossValues
             }
         };
-
-        XAxes = new[] { new Axis { Name = "Epoch", MinLimit = 1 } };
-        YAxes = new[] { new Axis { Name = "Loss" } };
 
         // default preset
         SelectedPreset = Presets.FirstOrDefault();
@@ -94,6 +84,8 @@ public sealed class TrainingViewModel : ViewModelBase
 
     public ObservableCollection<EpochViewModel> Epochs { get; } = new();
     public ObservableCollection<string> Logs { get; } = new();
+    public ObservableCollection<double> TrainLossValues => _trainLossValues;
+    public ObservableCollection<double?> ValLossValues => _valLossValues;
     public string LogText
     {
         get => _logText;
@@ -110,13 +102,18 @@ public sealed class TrainingViewModel : ViewModelBase
         }
     }
 
-    public bool IsRunning
+    public bool RequiresDatasetPath => SelectedPreset?.RequiresDatasetPath == true;
+
+    public TrainingState State
     {
-        get => _isRunning;
+        get => _state;
         private set
         {
-            if (SetField(ref _isRunning, value))
+            if (SetField(ref _state, value))
             {
+                OnPropertyChanged(nameof(IsBusy));
+                OnPropertyChanged(nameof(CanStart));
+                OnPropertyChanged(nameof(CanStop));
                 StartCommand.RaiseCanExecuteChanged();
                 StopCommand.RaiseCanExecuteChanged();
                 SaveModelCommand.RaiseCanExecuteChanged();
@@ -125,10 +122,20 @@ public sealed class TrainingViewModel : ViewModelBase
         }
     }
 
+    public bool IsBusy => State is TrainingState.Starting or TrainingState.Running or TrainingState.Stopping;
+    public bool CanStart => State is TrainingState.Idle or TrainingState.Completed or TrainingState.Failed;
+    public bool CanStop => State == TrainingState.Running;
+
     public string Status
     {
         get => _status;
         private set => SetField(ref _status, value);
+    }
+
+    public string ElapsedText
+    {
+        get => _elapsedText;
+        private set => SetField(ref _elapsedText, value);
     }
 
     public string DatasetPath
@@ -245,8 +252,6 @@ public sealed class TrainingViewModel : ViewModelBase
     public RelayCommand ApplyPresetCommand { get; }
 
     public ISeries[] Series { get; }
-    public Axis[] XAxes { get; }
-    public Axis[] YAxes { get; }
 
     /// <summary>
     /// Configure training pipeline from the hosting app (model/optimizer/loss/data).
@@ -274,7 +279,9 @@ public sealed class TrainingViewModel : ViewModelBase
         DropLast = preset.DropLast;
         Seed = Seed; // keep user seed
 
-        _host.SetDataProviders(preset.TrainProvider, preset.ValProvider);
+        _host.SetDataProviders(
+            () => preset.BuildTrain(preset.RequiresDatasetPath ? DatasetPath : null),
+            () => preset.BuildVal(preset.RequiresDatasetPath ? DatasetPath : null));
     }
 
     public Network BuildNetworkFromState()
@@ -327,7 +334,7 @@ public sealed class TrainingViewModel : ViewModelBase
 
     private Task StartAsync()
     {
-        if (_runningTask is { IsCompleted: false })
+        if (!CanStart || _runningTask is { IsCompleted: false })
         {
             Status = "Уже идёт обучение.";
             return Task.CompletedTask;
@@ -335,49 +342,88 @@ public sealed class TrainingViewModel : ViewModelBase
 
         if (!_host.IsConfigured)
         {
+            State = TrainingState.Failed;
             Status = "Нет конфигурации тренировки: вызовите Configure(...) из кода.";
             return Task.CompletedTask;
         }
 
         if (EpochsCount <= 0 || BatchSize <= 0 || AccumulationSteps <= 0 || InputSize <= 0 || OutputSize <= 0)
         {
+            State = TrainingState.Failed;
             Status = "Проверьте размеры и Epochs/BatchSize/AccumSteps (>0).";
+            return Task.CompletedTask;
+        }
+
+        if (RequiresDatasetPath && string.IsNullOrWhiteSpace(DatasetPath))
+        {
+            State = TrainingState.Failed;
+            Status = "Укажите путь к датасету (CSV/JSON).";
             return Task.CompletedTask;
         }
 
         ResetProgress();
         Status = "Запуск...";
-        IsRunning = true;
+        State = TrainingState.Starting;
+        StartElapsedTimer();
 
         _sessionCts = new CancellationTokenSource();
 
-        var options = BuildOptions();
-        _runningTask = _host.StartAsync(options, OnEpoch, _sessionCts.Token);
-
-        _ = _runningTask.ContinueWith(t =>
+        try
         {
+            var options = BuildOptions();
+            _runningTask = _host.StartAsync(options, OnEpoch, _sessionCts.Token);
+            State = TrainingState.Running;
+
+            _ = _runningTask.ContinueWith(t =>
+            {
+                Dispatcher.UIThread.Post(() =>
+                {
+                    if (t.IsCanceled)
+                    {
+                        Status = "Остановлено.";
+                        State = TrainingState.Completed;
+                    }
+                    else if (t.IsFaulted)
+                    {
+                        Status = $"Ошибка: {t.Exception?.GetBaseException().Message}";
+                        State = TrainingState.Failed;
+                        if (t.Exception != null)
+                            AddLogLine($"Ошибка обучения: {t.Exception.GetBaseException().Message}");
+                    }
+                    else
+                    {
+                        Status = "Обучение завершено.";
+                        State = TrainingState.Completed;
+                    }
+
+                    StopElapsedTimer();
+                    _sessionCts?.Dispose();
+                    _sessionCts = null;
+                    _runningTask = null;
+                });
+            });
+        }
+        catch (Exception ex)
+        {
+            StopElapsedTimer();
+            _sessionCts?.Dispose();
+            _sessionCts = null;
             Dispatcher.UIThread.Post(() =>
             {
-                if (t.IsCanceled)
-                    Status = "Остановлено.";
-                else if (t.IsFaulted)
-                    Status = $"Ошибка: {t.Exception?.GetBaseException().Message}";
-                else
-                    Status = "Обучение завершено.";
-
-                IsRunning = false;
-                _sessionCts?.Dispose();
-                _sessionCts = null;
+                Status = $"Запуск не удался: {ex.GetBaseException().Message}";
+                State = TrainingState.Failed;
+                AddLogLine($"Ошибка запуска: {ex.GetBaseException().Message}");
             });
-        });
+        }
 
         return Task.CompletedTask;
     }
 
     private void Stop()
     {
-        if (!IsRunning) return;
+        if (!CanStop) return;
         Status = "Остановка...";
+        State = TrainingState.Stopping;
         _host.Stop();
         _sessionCts?.Cancel();
     }
@@ -444,8 +490,6 @@ public sealed class TrainingViewModel : ViewModelBase
                 _trainLossValues.RemoveAt(0);
             if (_valLossValues.Count >= MaxEpochRows)
                 _valLossValues.RemoveAt(0);
-            if (Logs.Count >= MaxEpochRows)
-                Logs.RemoveAt(0);
 
             Epochs.Add(new EpochViewModel
             {
@@ -461,8 +505,7 @@ public sealed class TrainingViewModel : ViewModelBase
 
             var accText = acc.HasValue ? acc.Value.ToString("F4") : "n/a";
             var line = $"Epoch {r.Epoch}: Accuracy={accText}, TrainLoss={r.TrainLoss:F4}" + (r.ValLoss.HasValue ? $", ValLoss={r.ValLoss:F4}" : "");
-            Logs.Add(line);
-            LogText = string.Join(Environment.NewLine, Logs);
+            AddLogLine(line);
         });
     }
 
@@ -471,5 +514,39 @@ public sealed class TrainingViewModel : ViewModelBase
         Epochs.Clear();
         _trainLossValues.Clear();
         _valLossValues.Clear();
+        Logs.Clear();
+        LogText = string.Empty;
+        ElapsedText = "00:00:00";
+    }
+
+    private void AddLogLine(string line)
+    {
+        if (Logs.Count >= MaxEpochRows)
+            Logs.RemoveAt(0);
+        Logs.Add(line);
+        LogText = string.Join(Environment.NewLine, Logs);
+    }
+
+    private void StartElapsedTimer()
+    {
+        _stopwatch.Restart();
+        _elapsedTimer?.Stop();
+        _elapsedTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(300) };
+        _elapsedTimer.Tick += (_, _) => UpdateElapsed();
+        _elapsedTimer.Start();
+        UpdateElapsed();
+    }
+
+    private void StopElapsedTimer()
+    {
+        _elapsedTimer?.Stop();
+        _elapsedTimer = null;
+        _stopwatch.Stop();
+        UpdateElapsed();
+    }
+
+    private void UpdateElapsed()
+    {
+        ElapsedText = _stopwatch.Elapsed.ToString(@"hh\:mm\:ss");
     }
 }

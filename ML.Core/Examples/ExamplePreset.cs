@@ -1,6 +1,6 @@
 using ML.Core;
 
-namespace ML.Gui.Examples;
+namespace ML.Core.Examples;
 
 public sealed class ExamplePreset
 {
@@ -16,6 +16,10 @@ public sealed class ExamplePreset
     public int Accumulation { get; init; } = 1;
     public bool Shuffle { get; init; } = true;
     public bool DropLast { get; init; } = false;
-    public Func<IEnumerable<(double[] x, int y)>> TrainProvider { get; init; } = () => Array.Empty<(double[], int)>();
-    public Func<IEnumerable<(double[] x, int y)>?>? ValProvider { get; init; } = null;
+    public bool RequiresDatasetPath { get; init; }
+    public Func<string?, IEnumerable<(double[] x, int y)>> TrainFactory { get; init; } = _ => Array.Empty<(double[], int)>();
+    public Func<string?, IEnumerable<(double[] x, int y)>?>? ValFactory { get; init; }
+
+    public IEnumerable<(double[] x, int y)> BuildTrain(string? datasetPath) => TrainFactory(datasetPath);
+    public IEnumerable<(double[] x, int y)>? BuildVal(string? datasetPath) => ValFactory?.Invoke(datasetPath);
 }
