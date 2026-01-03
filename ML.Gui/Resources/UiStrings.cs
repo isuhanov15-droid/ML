@@ -54,6 +54,10 @@ public static class UiStrings
     public const string Browse = "...";
     public const string Save = "Сохранить";
     public const string Load = "Загрузить";
+    public const string SaveConfig = "Сохранить конфиг";
+    public const string LoadConfig = "Загрузить конфиг";
+    public const string ExportMetrics = "Экспорт метрик";
+    public const string AutoExport = "Автосохранение конфига и метрик";
 
     public const string MetricsTitle = "Карточки";
     public const string LearningRateCard = "Скорость обучения";

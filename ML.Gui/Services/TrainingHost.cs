@@ -32,6 +32,7 @@ public sealed class TrainingHost
     public Network? CurrentNetwork => _currentNetwork;
     public Func<IEnumerable<(double[] x, int y)>>? CurrentTrainProvider => _trainProvider;
     public Func<IEnumerable<(double[] x, int y)>?>? CurrentValProvider => _valProvider;
+    public bool HasCheckpoint => _currentNetwork != null;
 
     public void Configure(
         Func<Network> networkFactory,
@@ -54,7 +55,7 @@ public sealed class TrainingHost
         _evalData = null;
     }
 
-    public Task StartAsync(TrainOptions options, Action<TrainEpochResult> onEpoch, CancellationToken externalCt)
+    public Task StartAsync(TrainOptions options, Action<TrainEpochResult> onEpoch, CancellationToken externalCt, bool useCheckpoint = false)
     {
         if (!IsConfigured) throw new InvalidOperationException("Training pipeline is not configured.");
         if (IsRunning) throw new InvalidOperationException("Training is already running.");
@@ -68,7 +69,7 @@ public sealed class TrainingHost
 
         _runTask = Task.Factory.StartNew(() =>
         {
-            _currentNetwork = _preloadedNetwork ?? _networkFactory!();
+            _currentNetwork = useCheckpoint ? _currentNetwork ?? _preloadedNetwork ?? _networkFactory!() : _preloadedNetwork ?? _networkFactory!();
             _preloadedNetwork = null;
 
             var trainer = _trainerFactory!(_currentNetwork);
@@ -106,7 +107,13 @@ public sealed class TrainingHost
         _cts?.Cancel();
     }
 
-    public double? ComputeAccuracy()
+    public void PrepareResume()
+    {
+        if (_currentNetwork != null)
+            _preloadedNetwork = _currentNetwork;
+    }
+
+    public double? ComputeAccuracy(CancellationToken ct = default)
     {
         var data = _evalData;
         var model = _currentNetwork;
@@ -118,6 +125,9 @@ public sealed class TrainingHost
 
         foreach (var (x, y) in data)
         {
+            if (ct.IsCancellationRequested)
+                throw new OperationCanceledException(ct);
+
             var p = model.Forward(x, training: false);
             int pred = ArgMax(p);
             if (pred == y) ok++;

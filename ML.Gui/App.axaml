@@ -2,7 +2,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:fluent="clr-namespace:Avalonia.Themes.Fluent;assembly=Avalonia.Themes.Fluent"
              x:Class="ML.Gui.App"
-             RequestedThemeVariant="Light">
+             RequestedThemeVariant="Dark">
   <Application.Styles>
     <fluent:FluentTheme />
     <Style Selector="TextBlock,Label">
@@ -14,15 +14,17 @@
       <Setter Property="BorderBrush" Value="#2A3242"/>
       <Setter Property="SelectionBrush" Value="#4B89FF"/>
       <Setter Property="CaretBrush" Value="#F6F8FC"/>
-      <Setter Property="Padding" Value="8,6"/>
-      <Setter Property="Margin" Value="0,2,12,2"/>
+      <Setter Property="Padding" Value="10,6"/>
+      <Setter Property="MinHeight" Value="34"/>
+      <Setter Property="Margin" Value="0,2,10,2"/>
     </Style>
     <Style Selector="ComboBox">
       <Setter Property="Foreground" Value="#EEF1F7"/>
       <Setter Property="Background" Value="#1A1F2A"/>
       <Setter Property="BorderBrush" Value="#2A3242"/>
-      <Setter Property="Padding" Value="8,4"/>
-      <Setter Property="Margin" Value="0,2,12,2"/>
+      <Setter Property="Padding" Value="10,6"/>
+      <Setter Property="MinHeight" Value="34"/>
+      <Setter Property="Margin" Value="0,2,10,2"/>
     </Style>
     <Style Selector="ComboBoxItem">
       <Setter Property="Foreground" Value="#EEF1F7"/>
@@ -36,8 +38,13 @@
       <Setter Property="Background" Value="#2F3B58"/>
       <Setter Property="Foreground" Value="#F6F8FC"/>
     </Style>
+    <Style Selector="ComboBox /template/ Border#PART_PopupBorder">
+      <Setter Property="Background" Value="#161920"/>
+      <Setter Property="BorderBrush" Value="#2A3242"/>
+    </Style>
     <Style Selector="CheckBox">
       <Setter Property="Foreground" Value="#EEF1F7"/>
+      <Setter Property="Margin" Value="0,2,10,2"/>
     </Style>
     <Style Selector="CheckBox:checked /template/ TextBlock#PART_TextBlock">
       <Setter Property="Foreground" Value="#F6F8FC"/>
@@ -60,6 +67,7 @@
       <Setter Property="BorderBrush" Value="#2F3B50"/>
       <Setter Property="Padding" Value="10,6"/>
       <Setter Property="Margin" Value="0,2,8,2"/>
+      <Setter Property="MinHeight" Value="34"/>
     </Style>
     <Style Selector="Button:pointerover">
       <Setter Property="Background" Value="#35507A"/>

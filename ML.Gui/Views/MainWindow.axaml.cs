@@ -165,6 +165,72 @@ public partial class MainWindow : Window
             vm.Inference.ModelPath = path;
     }
 
+    private async void OnBrowseSaveConfig(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        if (DataContext is not MainViewModel vm) return;
+
+        var file = await StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
+        {
+            Title = "Сохранить конфиг",
+            SuggestedFileName = string.IsNullOrWhiteSpace(vm.Training.ModelName) ? "config.json" : $"{vm.Training.ModelName}_config.json",
+            FileTypeChoices = new[] { new FilePickerFileType("Config json") { Patterns = new[] { "*.json" } } }
+        });
+
+        var path = file?.TryGetLocalPath();
+        if (!string.IsNullOrWhiteSpace(path))
+            vm.Training.ConfigSavePath = path;
+    }
+
+    private void OnSaveConfig(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        if (DataContext is not MainViewModel vm) return;
+        vm.Training.SaveConfig();
+    }
+
+    private async void OnBrowseLoadConfig(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        if (DataContext is not MainViewModel vm) return;
+
+        var files = await StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
+        {
+            Title = "Загрузить конфиг",
+            AllowMultiple = false,
+            FileTypeFilter = new[] { new FilePickerFileType("Config json") { Patterns = new[] { "*.json" } } }
+        });
+
+        var path = files?.FirstOrDefault()?.TryGetLocalPath();
+        if (!string.IsNullOrWhiteSpace(path))
+            vm.Training.ConfigLoadPath = path;
+    }
+
+    private void OnLoadConfig(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        if (DataContext is not MainViewModel vm) return;
+        vm.Training.LoadConfig(vm.Training.ConfigLoadPath);
+    }
+
+    private async void OnBrowseExportMetrics(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        if (DataContext is not MainViewModel vm) return;
+
+        var file = await StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
+        {
+            Title = "Экспорт метрик",
+            SuggestedFileName = string.IsNullOrWhiteSpace(vm.Training.ModelName) ? "metrics.csv" : $"{vm.Training.ModelName}_metrics.csv",
+            FileTypeChoices = new[] { new FilePickerFileType("CSV") { Patterns = new[] { "*.csv" } } }
+        });
+
+        var path = file?.TryGetLocalPath();
+        if (!string.IsNullOrWhiteSpace(path))
+            vm.Training.MetricsExportPath = path;
+    }
+
+    private void OnExportMetrics(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        if (DataContext is not MainViewModel vm) return;
+        vm.Training.ExportMetrics();
+    }
+
     private void ApplyChartStyles()
     {
         if (LossChart?.Series == null)
@@ -178,12 +244,12 @@ public partial class MainWindow : Window
             switch (series)
             {
                 case LineSeries<double> train:
-                    train.GeometrySize = 6;
+                    train.GeometrySize = 4;
                     train.Fill = null;
                     if (trainStroke != null) train.Stroke = trainStroke;
                     break;
                 case LineSeries<double?> val:
-                    val.GeometrySize = 6;
+                    val.GeometrySize = 4;
                     val.Fill = null;
                     if (valStroke != null) val.Stroke = valStroke;
                     break;
