@@ -8,23 +8,29 @@
     <Style Selector="TextBlock,Label">
       <Setter Property="TextElement.Foreground" Value="#EEF1F7"/>
     </Style>
+    <Style Selector="TextBlock">
+      <Setter Property="FontSize" Value="12"/>
+    </Style>
+    <Style Selector="Label">
+      <Setter Property="FontSize" Value="12"/>
+    </Style>
     <Style Selector="TextBox">
       <Setter Property="Foreground" Value="#EEF1F7"/>
       <Setter Property="Background" Value="#1A1F2A"/>
       <Setter Property="BorderBrush" Value="#2A3242"/>
       <Setter Property="SelectionBrush" Value="#4B89FF"/>
       <Setter Property="CaretBrush" Value="#F6F8FC"/>
-      <Setter Property="Padding" Value="10,6"/>
-      <Setter Property="MinHeight" Value="34"/>
-      <Setter Property="Margin" Value="0,2,10,2"/>
+      <Setter Property="Padding" Value="8,4"/>
+      <Setter Property="MinHeight" Value="28"/>
+      <Setter Property="Margin" Value="0,2,8,2"/>
     </Style>
     <Style Selector="ComboBox">
       <Setter Property="Foreground" Value="#EEF1F7"/>
       <Setter Property="Background" Value="#1A1F2A"/>
       <Setter Property="BorderBrush" Value="#2A3242"/>
-      <Setter Property="Padding" Value="10,6"/>
-      <Setter Property="MinHeight" Value="34"/>
-      <Setter Property="Margin" Value="0,2,10,2"/>
+      <Setter Property="Padding" Value="8,4"/>
+      <Setter Property="MinHeight" Value="28"/>
+      <Setter Property="Margin" Value="0,2,8,2"/>
     </Style>
     <Style Selector="ComboBoxItem">
       <Setter Property="Foreground" Value="#EEF1F7"/>
@@ -65,9 +71,9 @@
       <Setter Property="Foreground" Value="#F6F8FC"/>
       <Setter Property="Background" Value="#2C3A52"/>
       <Setter Property="BorderBrush" Value="#2F3B50"/>
-      <Setter Property="Padding" Value="10,6"/>
-      <Setter Property="Margin" Value="0,2,8,2"/>
-      <Setter Property="MinHeight" Value="34"/>
+      <Setter Property="Padding" Value="8,4"/>
+      <Setter Property="Margin" Value="0,2,6,2"/>
+      <Setter Property="MinHeight" Value="28"/>
     </Style>
     <Style Selector="Button:pointerover">
       <Setter Property="Background" Value="#35507A"/>

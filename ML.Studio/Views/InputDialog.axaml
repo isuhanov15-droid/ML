@@ -1,0 +1,18 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="ML.Studio.Views.InputDialog"
+        Width="420"
+        Height="160"
+        WindowStartupLocation="CenterOwner"
+        Title="Введите значение">
+  <DockPanel Margin="12" LastChildFill="True">
+    <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+      <Button Content="ОК" IsDefault="True" Click="OnOk" />
+      <Button Content="Отмена" IsCancel="True" Click="OnCancel" />
+    </StackPanel>
+    <StackPanel Spacing="8">
+      <TextBlock Text="{Binding Prompt}" />
+      <TextBox Text="{Binding Value}" />
+    </StackPanel>
+  </DockPanel>
+</Window>

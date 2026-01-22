@@ -1,0 +1,464 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:controls="clr-namespace:ML.Studio.Controls"
+        x:Class="ML.Studio.Views.MainWindow"
+        Width="1200"
+        Height="780"
+        MinWidth="900"
+        MinHeight="640"
+        FontSize="13"
+        Title="ML.Studio"
+        KeyDown="OnKeyDown">
+  <DockPanel Margin="8">
+    <Menu DockPanel.Dock="Top">
+      <MenuItem Header="Файл">
+        <MenuItem Header="Новый проект" Click="OnNewProject" />
+        <MenuItem Header="Открыть проект..." Click="OnOpenProject" />
+        <Separator />
+        <MenuItem Header="Новый файл" Click="OnNewFile" />
+        <MenuItem Header="Открыть файл" Click="OnOpenFile" />
+        <Separator />
+        <MenuItem Header="Сохранить" Click="OnSaveFile" />
+        <MenuItem Header="Сохранить как..." Click="OnSaveFileAs" />
+        <MenuItem Header="Сохранить все" Click="OnSaveAll" />
+        <Separator />
+        <MenuItem Header="Переименовать" Click="OnRenameFile" />
+        <MenuItem Header="Удалить" Click="OnDeleteFile" />
+      </MenuItem>
+      <MenuItem Header="Запуск">
+        <MenuItem Header="Запустить эксперимент" Click="OnStart" IsEnabled="{Binding CanRun}" />
+        <MenuItem Header="Остановить" Click="OnStop" IsEnabled="{Binding CanStop}" />
+      </MenuItem>
+      <MenuItem Header="Вид">
+        <MenuItem Header="Тема">
+          <MenuItem Header="VS Dark" Click="OnThemeVsDark" />
+          <MenuItem Header="Graphite" Click="OnThemeGraphite" />
+          <MenuItem Header="Midnight" Click="OnThemeMidnight" />
+        </MenuItem>
+      </MenuItem>
+    </Menu>
+
+    <Border DockPanel.Dock="Top" Classes="panel" Margin="0,8,0,0" Padding="8">
+      <Grid ColumnDefinitions="Auto,180,Auto,80,Auto,Auto,Auto,Auto,*" RowDefinitions="Auto">
+        <TextBlock Text="Хост:" VerticalAlignment="Center" />
+        <TextBox Grid.Column="1" Text="{Binding Host}" Margin="6,0,0,0" />
+        <TextBlock Grid.Column="2" Text="Порт:" VerticalAlignment="Center" Margin="12,0,0,0" />
+        <TextBox Grid.Column="3" Text="{Binding PortText}" Margin="6,0,0,0" />
+        <Button Grid.Column="4" Content="Подключиться" Margin="12,0,0,0" Click="OnConnect" IsEnabled="{Binding CanConnect}" />
+        <Button Grid.Column="5" Content="Отключиться" Margin="6,0,0,0" Click="OnDisconnect" IsEnabled="{Binding CanDisconnect}" />
+        <TextBlock Grid.Column="6" Text="{Binding StatusLine}" VerticalAlignment="Center" Margin="12,0,0,0" />
+        <Button Grid.Column="7" Content="Копировать run id" Margin="12,0,0,0" Click="OnCopyRunId" IsEnabled="{Binding HasRunId}" />
+      </Grid>
+    </Border>
+
+    <Grid RowDefinitions="*,6,200" ColumnDefinitions="280,6,*,6,300" Margin="0,8,0,0">
+      <Grid Grid.Column="0" Grid.RowSpan="3" RowDefinitions="*,6,*">
+        <Border Classes="panel" Grid.Row="0">
+          <DockPanel>
+            <Border Classes="panel-header" DockPanel.Dock="Top" Padding="8">
+              <TextBlock Text="Проекты" />
+            </Border>
+            <ScrollViewer VerticalScrollBarVisibility="Auto">
+              <StackPanel Spacing="6" Margin="8">
+                <TextBlock Text="{Binding CurrentProjectTitle}" FontWeight="SemiBold" />
+                <TreeView ItemsSource="{Binding ProjectTree}" SelectedItem="{Binding SelectedNode}" DoubleTapped="OnProjectTreeDoubleTapped">
+                  <TreeView.ContextMenu>
+                    <ContextMenu>
+                      <MenuItem Header="Новый файл" Click="OnNewFile" />
+                      <MenuItem Header="Обновить" Click="OnRefreshProject" />
+                      <MenuItem Header="Переименовать" Click="OnRenameFile" />
+                      <MenuItem Header="Удалить" Click="OnDeleteFile" />
+                      <MenuItem Header="Показать в проводнике" Click="OnRevealFile" />
+                    </ContextMenu>
+                  </TreeView.ContextMenu>
+                  <TreeView.ItemTemplate>
+                    <TreeDataTemplate ItemsSource="{Binding Children}">
+                      <TextBlock Text="{Binding Name}" />
+                    </TreeDataTemplate>
+                  </TreeView.ItemTemplate>
+                </TreeView>
+              </StackPanel>
+            </ScrollViewer>
+          </DockPanel>
+        </Border>
+
+        <GridSplitter Grid.Row="1" Height="6" />
+
+        <Border Classes="panel" Grid.Row="2">
+          <DockPanel>
+            <Border Classes="panel-header" DockPanel.Dock="Top" Padding="8">
+              <TextBlock Text="Параметры" />
+            </Border>
+            <ScrollViewer VerticalScrollBarVisibility="Auto">
+              <StackPanel Spacing="6" Margin="8">
+              <TextBlock Text="epochs" />
+              <TextBox Text="{Binding ParamEpochs}" Classes.invalid="{Binding EpochsInvalid}" />
+              <TextBlock Text="learningRate" />
+              <TextBox Text="{Binding ParamLearningRate}" Classes.invalid="{Binding LearningRateInvalid}" />
+              <TextBlock Text="batchSize" />
+              <TextBox Text="{Binding ParamBatchSize}" Classes.invalid="{Binding BatchSizeInvalid}" />
+              <TextBlock Text="optimizer" />
+              <ComboBox ItemsSource="{Binding OptimizerOptions}" SelectedItem="{Binding ParamOptimizer}" />
+              <CheckBox Content="Использовать params.json" IsChecked="{Binding UseFileParams}" />
+              <CheckBox Content="Продолжить обучение (resume)" IsChecked="{Binding ResumeTraining}" />
+              <StackPanel Orientation="Horizontal" Spacing="6">
+                <Button Content="Загрузить params.json" Click="OnLoadParams" />
+                <Button Content="Сохранить params.json" Click="OnSaveParams" />
+                <Button Content="Сбросить" Click="OnResetParams" />
+              </StackPanel>
+            </StackPanel>
+            </ScrollViewer>
+          </DockPanel>
+        </Border>
+
+      </Grid>
+
+      <GridSplitter Grid.Column="1" Width="6" />
+
+      <Border Classes="panel" Grid.Column="2" Grid.Row="0">
+        <DockPanel>
+          <DockPanel DockPanel.Dock="Top">
+            <Border Classes="panel-header" DockPanel.Dock="Top" Padding="6">
+              <Grid ColumnDefinitions="*,Auto,Auto,Auto" VerticalAlignment="Center">
+                <TabControl Grid.Column="0" SelectedIndex="{Binding ModeIndex}">
+                  <TabItem Header="Редактор" />
+                  <TabItem Header="График" />
+                  <TabItem Header="Структура" />
+                  <TabItem Header="Прогон" />
+                </TabControl>
+                <TextBlock Grid.Column="1" Text="{Binding ShortRunId}" VerticalAlignment="Center" Margin="8,0,8,0" />
+                <Button Grid.Column="2" Content="Запуск" Click="OnStart" IsEnabled="{Binding CanRun}" Margin="0,0,6,0" />
+                <Button Grid.Column="3" Content="Стоп" Click="OnStop" IsEnabled="{Binding CanStop}" />
+              </Grid>
+            </Border>
+
+            <Grid>
+              <Border IsVisible="{Binding IsEditorMode}">
+                <TabControl ItemsSource="{Binding EditorTabs}" SelectedItem="{Binding SelectedTab}">
+                  <TabControl.ItemTemplate>
+                    <DataTemplate>
+                      <StackPanel Orientation="Horizontal" Spacing="6">
+                        <TextBlock Text="{Binding DisplayTitle}" />
+                        <Button Content="×" Padding="0" Width="18" Height="18" Click="OnCloseTab" Tag="{Binding}" />
+                      </StackPanel>
+                    </DataTemplate>
+                  </TabControl.ItemTemplate>
+                  <TabControl.ContentTemplate>
+                    <DataTemplate>
+                      <TextBox Text="{Binding Text, Mode=TwoWay}"
+                               AcceptsReturn="True"
+                               AcceptsTab="True"
+                               TextWrapping="NoWrap"
+                               FontFamily="Consolas"
+                               ScrollViewer.HorizontalScrollBarVisibility="Auto"
+                               ScrollViewer.VerticalScrollBarVisibility="Auto" />
+                    </DataTemplate>
+                  </TabControl.ContentTemplate>
+                </TabControl>
+              </Border>
+
+              <Grid IsVisible="{Binding IsGraphMode}" RowDefinitions="Auto,*,Auto" Margin="8">
+                <Grid Grid.Row="0" ColumnDefinitions="Auto,Auto,Auto,*,Auto,Auto">
+                  <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,0,0,0">
+                    <CheckBox IsChecked="{Binding ShowTrainLoss}" VerticalAlignment="Center" />
+                    <Border Width="10" Height="10" Background="#5FB3FF" />
+                    <TextBlock Text="TrainLoss" VerticalAlignment="Center" />
+                  </StackPanel>
+                  <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" Margin="8,0,0,0">
+                    <CheckBox IsChecked="{Binding ShowValLoss}" VerticalAlignment="Center" />
+                    <Border Width="10" Height="10" Background="#FFB84D" />
+                    <TextBlock Text="ValLoss" VerticalAlignment="Center" />
+                  </StackPanel>
+                  <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6" Margin="8,0,0,0">
+                    <CheckBox IsChecked="{Binding ShowAccuracy}" VerticalAlignment="Center" />
+                    <Border Width="10" Height="10" Background="#7DD36F" />
+                    <TextBlock Text="Accuracy" VerticalAlignment="Center" />
+                  </StackPanel>
+                  <Button Grid.Column="4" Content="Auto scale" Click="OnAutoScale" />
+                  <Button Grid.Column="5" Content="Экспорт CSV" Click="OnExportMetricsCsv" />
+                </Grid>
+                <Border Grid.Row="1" Classes="panel" Padding="6">
+                  <controls:MetricChart x:Name="MetricChart"
+                                        Items="{Binding Metrics}"
+                                        ShowTrainLoss="{Binding ShowTrainLoss}"
+                                        ShowValLoss="{Binding ShowValLoss}"
+                                        ShowAccuracy="{Binding ShowAccuracy}"
+                                        CompareMode="{Binding CompareMode}"
+                                        CompareItemsA="{Binding CompareItemsA}"
+                                        CompareItemsB="{Binding CompareItemsB}"
+                                        CompareShowTrainLoss="{Binding CompareShowTrain}"
+                                        CompareShowValLoss="{Binding CompareShowVal}"
+                                        CompareShowAccuracy="{Binding CompareShowAcc}" />
+                </Border>
+                <TextBlock Grid.Row="2" Text="График без сетки (в реальном времени)" Margin="0,6,0,0" />
+              </Grid>
+
+              <Grid IsVisible="{Binding IsStructureMode}" ColumnDefinitions="*,6,240" RowDefinitions="Auto,*" Margin="8">
+                <StackPanel Grid.Column="0" Grid.ColumnSpan="3" Orientation="Horizontal" Spacing="8" Margin="0,0,0,6">
+                  <TextBlock Text="Structure view" FontWeight="SemiBold" VerticalAlignment="Center" />
+                  <Button Content="Fit" Click="OnStructureFit" />
+                  <Button Content="Reset" Click="OnStructureReset" />
+                </StackPanel>
+                <Border Grid.Row="1" Grid.Column="0" Classes="panel" Padding="6">
+                  <controls:NetworkGraphView x:Name="StructureGraphView"
+                                             Graph="{Binding StructureGraph}"
+                                             SelectedNodeId="{Binding SelectedGraphNodeId, Mode=TwoWay}" />
+                </Border>
+                <GridSplitter Grid.Row="1" Grid.Column="1" Width="6" />
+                <Border Grid.Row="1" Grid.Column="2" Classes="panel" Padding="8">
+                  <StackPanel Spacing="6">
+                    <TextBlock Text="Layer details" FontWeight="SemiBold" />
+                    <TextBlock Text="{Binding SelectedLayerTitle}" FontWeight="SemiBold" />
+                    <TextBlock Text="{Binding SelectedLayerSubtitle}" />
+                    <ListBox ItemsSource="{Binding SelectedLayerMeta}">
+                      <ListBox.ItemTemplate>
+                        <DataTemplate>
+                          <TextBlock Text="{Binding}" />
+                        </DataTemplate>
+                      </ListBox.ItemTemplate>
+                    </ListBox>
+                  </StackPanel>
+                </Border>
+              </Grid>
+
+              <ScrollViewer IsVisible="{Binding IsRunMode}" VerticalScrollBarVisibility="Auto">
+              <Grid RowDefinitions="Auto,Auto,Auto,*" Margin="12">
+                <StackPanel Grid.Row="0" Spacing="6">
+                  <TextBlock Text="Модель" FontWeight="SemiBold" />
+                  <StackPanel Orientation="Horizontal" Spacing="8">
+                    <Button Content="Загрузить модель" Click="OnLoadModel" />
+                    <TextBlock Text="{Binding LoadedModelInfo}" VerticalAlignment="Center" />
+                  </StackPanel>
+                  <TextBlock Text="{Binding InferStatus}" />
+                </StackPanel>
+
+                <StackPanel Grid.Row="1" Spacing="6" Margin="0,10,0,0">
+                  <TextBlock Text="Вход" FontWeight="SemiBold" />
+                  <ItemsControl ItemsSource="{Binding InferInputs}" IsVisible="{Binding HasInferInputs}">
+                    <ItemsControl.ItemsPanel>
+                      <ItemsPanelTemplate>
+                        <WrapPanel />
+                      </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                      <DataTemplate>
+                        <StackPanel Margin="0,0,8,8">
+                          <TextBlock Text="{Binding Label}" />
+                          <TextBox Width="80" Text="{Binding Value}" />
+                        </StackPanel>
+                      </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                  </ItemsControl>
+                  <StackPanel IsVisible="{Binding ShowInferCsv}" Spacing="4">
+                    <TextBlock Text="Вход (CSV)" />
+                    <TextBox Text="{Binding InferInput}" />
+                  </StackPanel>
+                  <Button Content="Прогнать" Click="OnInferSingle" Width="120" />
+                </StackPanel>
+
+                <StackPanel Grid.Row="2" Spacing="6" Margin="0,10,0,0">
+                  <TextBlock Text="Выход" FontWeight="SemiBold" />
+                  <TextBox Text="{Binding InferOutput}" IsReadOnly="True" />
+                  <TextBlock Text="Предсказание" />
+                  <TextBox Text="{Binding InferPredicted}" IsReadOnly="True" />
+                  <TextBlock Text="Top3 вероятностей" />
+                  <TextBox Text="{Binding InferTopProbabilities}" IsReadOnly="True" />
+                  <StackPanel IsVisible="{Binding ShowSoftmaxBars}" Margin="0,6,0,0">
+                    <TextBlock Text="Softmax" />
+                    <ItemsControl ItemsSource="{Binding SoftmaxBars}">
+                      <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                          <StackPanel Orientation="Horizontal" />
+                        </ItemsPanelTemplate>
+                      </ItemsControl.ItemsPanel>
+                      <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                          <Border Classes="panel" Padding="6" Margin="0,0,8,0">
+                            <StackPanel HorizontalAlignment="Center" Spacing="4">
+                              <TextBlock Text="{Binding Label}" HorizontalAlignment="Center" />
+                              <ProgressBar Minimum="0" Maximum="1" Value="{Binding Value}" Width="60" Height="8">
+                                <ProgressBar.RenderTransform>
+                                  <RotateTransform Angle="-90" />
+                                </ProgressBar.RenderTransform>
+                                <ProgressBar.RenderTransformOrigin>0.5,0.5</ProgressBar.RenderTransformOrigin>
+                              </ProgressBar>
+                              <TextBlock Text="{Binding Display}" HorizontalAlignment="Center" />
+                            </StackPanel>
+                          </Border>
+                        </DataTemplate>
+                      </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                  </StackPanel>
+                </StackPanel>
+
+                <StackPanel Grid.Row="3" Spacing="10" Margin="0,10,0,0">
+                  <StackPanel Spacing="6" IsVisible="{Binding ShowDecisionBoundary}">
+                    <TextBlock Text="Decision boundary (2D)" FontWeight="SemiBold" />
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                      <TextBlock Text="Grid size" VerticalAlignment="Center" />
+                      <ComboBox Width="90" ItemsSource="{Binding GridSizes}" SelectedItem="{Binding SelectedGridSize}" />
+                      <TextBlock Text="Mode" VerticalAlignment="Center" />
+                      <ComboBox Width="170" ItemsSource="{Binding HeatmapModes}" SelectedItem="{Binding SelectedHeatmapMode}" />
+                      <Button Content="Build heatmap" Click="OnBuildHeatmap" />
+                      <Button Content="Clear" Click="OnClearHeatmap" />
+                      <Button Content="Cancel heatmap" Click="OnCancelHeatmap" IsEnabled="{Binding CanCancelHeatmap}" />
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" Spacing="10">
+                      <CheckBox Content="Auto range from dataset" IsChecked="{Binding AutoRangeFromDataset}" />
+                      <TextBlock Text="Xmin" VerticalAlignment="Center" />
+                      <TextBox Width="70" Text="{Binding RangeXMin}" IsEnabled="{Binding ManualRangeEnabled}" />
+                      <TextBlock Text="Xmax" VerticalAlignment="Center" />
+                      <TextBox Width="70" Text="{Binding RangeXMax}" IsEnabled="{Binding ManualRangeEnabled}" />
+                      <TextBlock Text="Ymin" VerticalAlignment="Center" />
+                      <TextBox Width="70" Text="{Binding RangeYMin}" IsEnabled="{Binding ManualRangeEnabled}" />
+                      <TextBlock Text="Ymax" VerticalAlignment="Center" />
+                      <TextBox Width="70" Text="{Binding RangeYMax}" IsEnabled="{Binding ManualRangeEnabled}" />
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" Spacing="12">
+                      <StackPanel Orientation="Horizontal" Spacing="6">
+                        <Border Width="16" Height="16" Background="#2E5BFF" />
+                        <TextBlock Text="Class 0" VerticalAlignment="Center" />
+                      </StackPanel>
+                      <StackPanel Orientation="Horizontal" Spacing="6">
+                        <Border Width="16" Height="16" Background="#E63B3B" />
+                        <TextBlock Text="Class 1" VerticalAlignment="Center" />
+                      </StackPanel>
+                      <StackPanel Orientation="Horizontal" Spacing="6" IsVisible="{Binding ShowThreshold}">
+                        <TextBlock Text="Threshold" VerticalAlignment="Center" Margin="12,0,0,0" />
+                        <Slider Width="140" Minimum="0" Maximum="1" Value="{Binding HeatmapThreshold}" />
+                        <TextBlock Text="{Binding HeatmapThreshold, StringFormat='{}{0:0.00}'}" VerticalAlignment="Center" />
+                      </StackPanel>
+                    </StackPanel>
+                    <TextBlock Text="{Binding HeatmapStatus}" />
+                    <Border Classes="panel" Padding="6">
+                      <Border Width="260" Height="260" HorizontalAlignment="Left" VerticalAlignment="Top">
+                        <Image Source="{Binding DecisionBoundaryImage}"
+                               Stretch="Fill" />
+                      </Border>
+                    </Border>
+                  </StackPanel>
+                  <StackPanel Spacing="6">
+                    <TextBlock Text="Оценка dataset.csv" FontWeight="SemiBold" />
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                      <TextBlock Text="inputCols" VerticalAlignment="Center" />
+                      <TextBox Width="120" Text="{Binding EvalInputColsText}" />
+                      <TextBlock Text="labelCol" VerticalAlignment="Center" />
+                      <TextBox Width="60" Text="{Binding EvalLabelColText}" />
+                      <Button Content="Evaluate dataset" Click="OnEvalDataset" />
+                    </StackPanel>
+                    <TextBlock Text="{Binding EvalStatus}" />
+                    <ListBox ItemsSource="{Binding EvalSamples}" Height="140" />
+                  </StackPanel>
+                  <StackPanel Spacing="6">
+                    <TextBlock Text="История (последние 20)" FontWeight="SemiBold" />
+                    <ListBox ItemsSource="{Binding InferHistory}" Height="140">
+                      <ListBox.ItemTemplate>
+                        <DataTemplate>
+                          <TextBlock Text="{Binding Display}"/>
+                        </DataTemplate>
+                      </ListBox.ItemTemplate>
+                    </ListBox>
+                  </StackPanel>
+                </StackPanel>
+              </Grid>
+              </ScrollViewer>
+            </Grid>
+          </DockPanel>
+          
+        </DockPanel>
+      </Border>
+
+      <GridSplitter Grid.Column="3" Width="6" />
+
+      <Border Classes="panel" Grid.Column="4" Grid.RowSpan="3">
+        <DockPanel>
+          <Border Classes="panel-header" DockPanel.Dock="Top" Padding="8">
+            <TextBlock Text="Метрики" />
+          </Border>
+          <ScrollViewer VerticalScrollBarVisibility="Auto">
+            <StackPanel Spacing="8" Margin="8">
+              <StackPanel Orientation="Horizontal" Spacing="8">
+                <TextBlock Text="Метрики обучения" FontWeight="SemiBold" />
+                <CheckBox Content="Следовать за последним" IsChecked="{Binding FollowMetrics}" />
+              </StackPanel>
+              <StackPanel Orientation="Horizontal" Spacing="6">
+                <TextBlock Text="Показывать каждые N эпох:" VerticalAlignment="Center" />
+                <TextBox Width="60" Text="{Binding MetricsEveryText}" Classes.invalid="{Binding MetricsEveryInvalid}" />
+              </StackPanel>
+              <Grid ColumnDefinitions="60,*,*,*">
+                <TextBlock Text="Epoch" FontWeight="SemiBold" />
+                <TextBlock Grid.Column="1" Text="TrainLoss" FontWeight="SemiBold" />
+                <TextBlock Grid.Column="2" Text="ValLoss" FontWeight="SemiBold" />
+                <TextBlock Grid.Column="3" Text="Acc" FontWeight="SemiBold" />
+              </Grid>
+              <ListBox x:Name="MetricsList" ItemsSource="{Binding Metrics}">
+                <ListBox.ItemTemplate>
+                  <DataTemplate>
+                    <Grid ColumnDefinitions="60,*,*,*">
+                      <TextBlock Text="{Binding Epoch}" />
+                      <TextBlock Grid.Column="1" Text="{Binding TrainLossDisplay}" />
+                      <TextBlock Grid.Column="2" Text="{Binding ValLossDisplay}" />
+                      <TextBlock Grid.Column="3" Text="{Binding AccDisplay}" />
+                    </Grid>
+                  </DataTemplate>
+                </ListBox.ItemTemplate>
+                <ListBox.Styles>
+                  <Style Selector="ListBoxItem">
+                    <Setter Property="Margin" Value="0" />
+                    <Setter Property="Padding" Value="0" />
+                  </Style>
+                </ListBox.Styles>
+              </ListBox>
+              <TextBlock Text="Сравнение запусков" FontWeight="SemiBold" />
+              <Border Classes="panel" Padding="8">
+                <StackPanel Spacing="6">
+                  <StackPanel Orientation="Horizontal" Spacing="6">
+                    <TextBlock Text="Run A" VerticalAlignment="Center" />
+                    <ComboBox Width="140" ItemsSource="{Binding RunIds}" SelectedItem="{Binding SelectedRunA}" />
+                    <TextBlock Text="Run B" VerticalAlignment="Center" />
+                    <ComboBox Width="140" ItemsSource="{Binding RunIds}" SelectedItem="{Binding SelectedRunB}" />
+                  </StackPanel>
+                  <StackPanel Orientation="Horizontal" Spacing="8">
+                    <CheckBox Content="TrainLoss" IsChecked="{Binding CompareShowTrain}" />
+                    <CheckBox Content="ValLoss" IsChecked="{Binding CompareShowVal}" />
+                    <CheckBox Content="Accuracy" IsChecked="{Binding CompareShowAcc}" />
+                  </StackPanel>
+                  <StackPanel Orientation="Horizontal" Spacing="8">
+                    <Button Content="Compare" Click="OnCompareRuns" />
+                    <Button Content="Clear" Click="OnClearCompare" />
+                  </StackPanel>
+                </StackPanel>
+              </Border>
+            </StackPanel>
+          </ScrollViewer>
+        </DockPanel>
+      </Border>
+
+      <GridSplitter Grid.Row="1" Grid.Column="2" Height="6" />
+
+      <Border Classes="panel" Grid.Row="2" Grid.Column="2">
+        <DockPanel>
+          <Border Classes="panel-header" DockPanel.Dock="Top" Padding="8">
+            <TextBlock Text="Логи" />
+          </Border>
+          <ListBox x:Name="LogsList"
+                   ItemsSource="{Binding Logs}"
+                   ScrollViewer.HorizontalScrollBarVisibility="Auto"
+                   ScrollViewer.VerticalScrollBarVisibility="Auto">
+            <ListBox.ItemTemplate>
+              <DataTemplate>
+                <TextBlock Text="{Binding}" TextWrapping="NoWrap" />
+              </DataTemplate>
+            </ListBox.ItemTemplate>
+            <ListBox.Styles>
+              <Style Selector="ListBoxItem">
+                <Setter Property="Margin" Value="0" />
+                <Setter Property="Padding" Value="0" />
+              </Style>
+            </ListBox.Styles>
+          </ListBox>
+        </DockPanel>
+      </Border>
+    </Grid>
+  </DockPanel>
+</Window>

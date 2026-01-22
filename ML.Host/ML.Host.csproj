@@ -1,0 +1,16 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\ML.Core\ML.Core.csproj" />
+    <ProjectReference Include="..\ML.Shared.Protocol\ML.Shared.Protocol.csproj" />
+    <ProjectReference Include="..\ML.Shared.Protocol\ML.Host.csproj" />
+  </ItemGroup>
+
+</Project>

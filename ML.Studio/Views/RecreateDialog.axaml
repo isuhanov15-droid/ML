@@ -1,0 +1,15 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="ML.Studio.Views.RecreateDialog"
+        Width="380"
+        Height="160"
+        WindowStartupLocation="CenterOwner"
+        Title="Обязательный файл">
+  <StackPanel Margin="12" Spacing="12">
+    <TextBlock Text="{Binding Message}" TextWrapping="Wrap" />
+    <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
+      <Button Content="Пересоздать" Click="OnRecreate" />
+      <Button Content="Закрыть" Click="OnClose" />
+    </StackPanel>
+  </StackPanel>
+</Window>

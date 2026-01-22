@@ -1,0 +1,8 @@
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:lvcPaint="clr-namespace:LiveChartsCore.SkiaSharpView.Painting;assembly=LiveChartsCore.SkiaSharpView">
+  <lvcPaint:SolidColorPaint x:Key="ChartTrainStroke" Color="#1EA7FD" StrokeThickness="3"/>
+  <lvcPaint:SolidColorPaint x:Key="ChartValStroke" Color="#F6A623" StrokeThickness="3"/>
+  <lvcPaint:SolidColorPaint x:Key="ChartAxisPaint" Color="#9BA5B5"/>
+  <lvcPaint:SolidColorPaint x:Key="ChartGridPaint" Color="#223048" StrokeThickness="1"/>
+</ResourceDictionary>

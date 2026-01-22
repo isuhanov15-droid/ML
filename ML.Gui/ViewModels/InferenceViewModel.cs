@@ -1,20 +1,21 @@
 using System;
-using System.Diagnostics;
 using System.Globalization;
 using System.Linq;
-using System.Threading;
 using System.Threading.Tasks;
 using Avalonia.Threading;
-using ML.Core.Inference;
+using ML.Gui.Services;
 using ML.Gui.Utils;
 
 namespace ML.Gui.ViewModels;
 
 public sealed class InferenceViewModel : ViewModelBase
 {
-    private readonly IInferenceSession _session = new InferenceSession();
+    private readonly ConnectionService _connection;
+    private readonly InferenceRemoteService _inference;
+    private readonly SettingsService _settingsService;
+    private readonly SettingsData _settings;
     private DispatcherTimer? _timer;
-    private CancellationTokenSource? _cts;
+    private EventHandler? _tickHandler;
     private bool _inferenceRunning;
 
     private string _modelPath = "";
@@ -25,9 +26,16 @@ public sealed class InferenceViewModel : ViewModelBase
     private bool _isMonitoring;
     private bool _isLoaded;
 
-    public InferenceViewModel()
+    public InferenceViewModel(ConnectionService connection, InferenceRemoteService inference, SettingsService settingsService)
     {
-        LoadModelCommand = new RelayCommand(LoadModel);
+        _connection = connection ?? throw new ArgumentNullException(nameof(connection));
+        _inference = inference ?? throw new ArgumentNullException(nameof(inference));
+        _settingsService = settingsService ?? throw new ArgumentNullException(nameof(settingsService));
+        _settings = _settingsService.Load();
+
+        _modelPath = _settings.LastLoadPath ?? "";
+
+        LoadModelCommand = new AsyncRelayCommand(LoadModelAsync);
         RunOnceCommand = new AsyncRelayCommand(RunOnceAsync, () => _isLoaded && !_isMonitoring);
         StartMonitorCommand = new RelayCommand(StartMonitor, () => _isLoaded && !_isMonitoring);
         StopMonitorCommand = new RelayCommand(StopMonitor, () => _isMonitoring);
@@ -77,32 +85,51 @@ public sealed class InferenceViewModel : ViewModelBase
         }
     }
 
-    public RelayCommand LoadModelCommand { get; }
+    public AsyncRelayCommand LoadModelCommand { get; }
     public AsyncRelayCommand RunOnceCommand { get; }
     public RelayCommand StartMonitorCommand { get; }
     public RelayCommand StopMonitorCommand { get; }
 
-    private void LoadModel()
+    private async Task LoadModelAsync()
     {
+        if (!await EnsureConnectedAsync())
+        {
+            Status = "Нет подключения к ML.Host.";
+            return;
+        }
+
         try
         {
-            _session.LoadFromFile(ModelPath);
-            _isLoaded = true;
-            Status = "Модель загружена.";
-            StartMonitorCommand.RaiseCanExecuteChanged();
-            RunOnceCommand.RaiseCanExecuteChanged();
+            var result = await _inference.LoadAsync(null, string.IsNullOrWhiteSpace(ModelPath) ? null : ModelPath);
+            if (result.Ok)
+            {
+                _isLoaded = true;
+                Status = "Модель загружена.";
+                if (!string.IsNullOrWhiteSpace(ModelPath))
+                {
+                    _settings.LastLoadPath = ModelPath;
+                    _settingsService.Save(_settings);
+                }
+            }
+            else
+            {
+                Status = $"Ошибка загрузки: {result.Message}";
+                _isLoaded = false;
+            }
         }
         catch (Exception ex)
         {
             Status = $"Ошибка загрузки: {ex.Message}";
             _isLoaded = false;
         }
+        finally
+        {
+            StartMonitorCommand.RaiseCanExecuteChanged();
+            RunOnceCommand.RaiseCanExecuteChanged();
+        }
     }
 
-    private async Task RunOnceAsync()
-    {
-        await RunInferenceAsync(CancellationToken.None);
-    }
+    private Task RunOnceAsync() => RunInferenceAsync();
 
     private void StartMonitor()
     {
@@ -113,9 +140,9 @@ public sealed class InferenceViewModel : ViewModelBase
         }
 
         StopMonitor();
-        _cts = new CancellationTokenSource();
         _timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(250) };
-        _timer.Tick += async (_, _) => await RunInferenceAsync(_cts.Token);
+        _tickHandler = async (_, _) => await RunInferenceAsync();
+        _timer.Tick += _tickHandler;
         _timer.Start();
         IsMonitoring = true;
         Status = "Мониторинг запущен.";
@@ -123,20 +150,24 @@ public sealed class InferenceViewModel : ViewModelBase
 
     private void StopMonitor()
     {
-        _timer?.Stop();
-        _timer = null;
-        _cts?.Cancel();
-        _cts = null;
+        if (_timer != null)
+        {
+            _timer.Stop();
+            if (_tickHandler != null)
+                _timer.Tick -= _tickHandler;
+            _timer = null;
+            _tickHandler = null;
+        }
+
         if (IsMonitoring)
             Status = "Мониторинг остановлен.";
         IsMonitoring = false;
     }
 
-    private async Task RunInferenceAsync(CancellationToken ct)
+    private async Task RunInferenceAsync()
     {
         if (_inferenceRunning) return;
         _inferenceRunning = true;
-        if (ct.IsCancellationRequested) return;
 
         double[]? input = ParseInput(InputText);
         if (input == null)
@@ -148,21 +179,26 @@ public sealed class InferenceViewModel : ViewModelBase
 
         try
         {
-            var sw = Stopwatch.StartNew();
-            var output = await Task.Run(() => _session.Predict(input), ct);
-            sw.Stop();
+            if (!await EnsureConnectedAsync())
+            {
+                Status = "Нет подключения к ML.Host.";
+                return;
+            }
+
+            var result = await _inference.PredictAsync(input);
+            if (!result.Ok)
+            {
+                Status = $"Ошибка инференса: {result.Message}";
+                _inferenceRunning = false;
+                return;
+            }
 
             Dispatcher.UIThread.Post(() =>
             {
-                if (ct.IsCancellationRequested) return;
-                OutputText = string.Join(", ", output.Select(v => v.ToString("F4", CultureInfo.InvariantCulture)));
-                LatencyText = $"{sw.ElapsedMilliseconds} мс";
+                OutputText = string.Join(", ", result.Output.Select(v => v.ToString("F4", CultureInfo.InvariantCulture)));
+                LatencyText = result.LatencyMs.HasValue ? $"{result.LatencyMs.Value} мс" : "—";
                 Status = "Инференс обновлён.";
             });
-        }
-        catch (OperationCanceledException)
-        {
-            Status = "Мониторинг остановлен.";
         }
         catch (Exception ex)
         {
@@ -188,5 +224,14 @@ public sealed class InferenceViewModel : ViewModelBase
         }
 
         return values.Length == 0 ? null : values;
+    }
+
+    private async Task<bool> EnsureConnectedAsync()
+    {
+        if (_connection.IsConnected)
+            return true;
+
+        await _connection.ConnectAsync(_connection.LastHost, _connection.LastPort);
+        return _connection.IsConnected;
     }
 }

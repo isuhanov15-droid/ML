@@ -1,8 +1,8 @@
 using Avalonia;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
-using ML.Gui.ViewModels;
 using ML.Gui.Views;
+using ML.Gui.ViewModels;
 
 namespace ML.Gui;
 

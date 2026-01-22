@@ -8,14 +8,15 @@
         xmlns:res="using:ML.Gui.Resources"
         x:Class="ML.Gui.Views.MainWindow"
         Title="{x:Static res:UiStrings.AppTitle}"
-        Width="1280" Height="840"
+        Width="1366" Height="768"
         Background="#0F1115"
         mc:Ignorable="d">
   <Design.DataContext>
     <vm:MainViewModel/>
   </Design.DataContext>
 
-  <Grid RowDefinitions="Auto,Auto,*" ColumnDefinitions="*">
+  <Viewbox Stretch="Uniform" StretchDirection="Both">
+    <Grid Width="1280" Height="720" RowDefinitions="Auto,Auto,*" ColumnDefinitions="*">
     <!-- Меню -->
     <Menu Grid.Row="0">
       <MenuItem Header="{x:Static res:UiStrings.MenuFile}">
@@ -57,15 +58,32 @@
     <!-- Основная зона -->
     <TabControl Grid.Row="2" Background="#0F1115">
       <TabItem Header="{x:Static res:UiStrings.TabConfig}">
-        <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
-          <Border Padding="12">
-            <StackPanel Spacing="12">
-              <StackPanel Spacing="6">
-                <TextBlock Text="{x:Static res:UiStrings.DataTitle}" FontWeight="Bold" FontSize="16" Foreground="#E5E5E5"/>
-                <Grid ColumnDefinitions="170,*,100" RowDefinitions="Auto,Auto" IsEnabled="{Binding Training.CanEdit}">
+        <Border Padding="12">
+          <Grid ColumnDefinitions="*,*">
+            <StackPanel Grid.Column="0" Spacing="6">
+              <Border Background="#161B23" CornerRadius="8" Padding="10">
+                <StackPanel Spacing="6">
+                  <TextBlock Text="ML.Host" Foreground="#E5E5E5" FontWeight="Bold"/>
+                  <Grid ColumnDefinitions="Auto,*,60,Auto,Auto" RowDefinitions="Auto">
+                    <TextBlock Grid.Column="0" Text="Host" Foreground="#C7CEDB" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                    <TextBox Grid.Column="1" Text="{Binding Host}" Watermark="127.0.0.1"/>
+                    <TextBox Grid.Column="2" Text="{Binding Port}" Watermark="5001" Margin="6,0,0,0"/>
+                    <Button Grid.Column="3" Content="Connect" Command="{Binding ConnectCommand}" MinWidth="90" Margin="6,0,0,0"/>
+                    <Button Grid.Column="4" Content="Disconnect" Command="{Binding DisconnectCommand}" MinWidth="96" Margin="6,0,0,0"/>
+                  </Grid>
+                  <StackPanel Orientation="Horizontal" Spacing="6">
+                    <TextBlock Text="Status" Foreground="#9BA5B5"/>
+                    <TextBlock Text="{Binding ConnectionStatus}" Foreground="#E5E5E5"/>
+                  </StackPanel>
+                </StackPanel>
+              </Border>
+
+              <StackPanel Spacing="4">
+                <TextBlock Text="{x:Static res:UiStrings.DataTitle}" FontWeight="Bold" Foreground="#E5E5E5"/>
+                <Grid ColumnDefinitions="140,*,72" RowDefinitions="Auto,Auto" IsEnabled="{Binding Training.CanEdit}">
                   <TextBlock Grid.Row="0" Grid.Column="0" Text="{x:Static res:UiStrings.DatasetPath}" Foreground="#C7CEDB" VerticalAlignment="Center"/>
                   <TextBox Grid.Row="0" Grid.Column="1" Text="{Binding Training.DatasetPath}" Watermark="dataset.csv / dataset.json"/>
-                  <Button Grid.Row="0" Grid.Column="2" Content="{x:Static res:UiStrings.Browse}" Click="OnBrowseDataset" HorizontalAlignment="Left" Width="80"/>
+                  <Button Grid.Row="0" Grid.Column="2" Content="{x:Static res:UiStrings.Browse}" Click="OnBrowseDataset" Width="64"/>
 
                   <TextBlock Grid.Row="1" Grid.Column="0" Text="{x:Static res:UiStrings.Example}" Foreground="#C7CEDB" VerticalAlignment="Center"/>
                   <ComboBox Grid.Row="1" Grid.Column="1" ItemsSource="{Binding Training.Presets}" SelectedItem="{Binding Training.SelectedPreset}">
@@ -73,148 +91,141 @@
                       <DataTemplate>
                         <StackPanel>
                           <TextBlock Text="{Binding Name}" />
-                          <TextBlock Text="{Binding Description}" Foreground="#8FA0B8" FontSize="11"/>
+                          <TextBlock Text="{Binding Description}" Foreground="#8FA0B8" FontSize="10"/>
                         </StackPanel>
                       </DataTemplate>
                     </ComboBox.ItemTemplate>
                   </ComboBox>
-                  <Button Grid.Row="1" Grid.Column="2" Content="{x:Static res:UiStrings.Apply}" Command="{Binding Training.ApplyPresetCommand}" Width="80"/>
+                  <Button Grid.Row="1" Grid.Column="2" Content="Прим." Command="{Binding Training.ApplyPresetCommand}" Width="64"/>
                 </Grid>
-                <TextBlock Text="{x:Static res:UiStrings.CustomDataset}" FontSize="12" Foreground="#6C7687"/>
+                <TextBlock Text="{x:Static res:UiStrings.CustomDataset}" FontSize="10" Foreground="#6C7687"/>
               </StackPanel>
 
-              <Border Height="1" Background="#1F2633" Margin="0,4,0,4"/>
+              <Border Height="1" Background="#1F2633" Margin="0,2,0,2"/>
 
-              <StackPanel Spacing="8">
-                <TextBlock Text="{x:Static res:UiStrings.ModelTitle}" FontWeight="Bold" FontSize="16" Foreground="#E5E5E5"/>
-                <UniformGrid Columns="4" Rows="1" Margin="0,4,0,0" HorizontalAlignment="Left" IsEnabled="{Binding Training.CanEdit}">
-                  <StackPanel Width="140" Margin="0,0,8,0">
+              <StackPanel Spacing="4">
+                <TextBlock Text="{x:Static res:UiStrings.ModelTitle}" FontWeight="Bold" Foreground="#E5E5E5"/>
+                <Grid ColumnDefinitions="*,*" RowDefinitions="Auto,Auto" IsEnabled="{Binding Training.CanEdit}">
+                  <StackPanel Grid.Row="0" Grid.Column="0" Margin="0,0,8,6">
                     <TextBlock Text="{x:Static res:UiStrings.Input}" Foreground="#C7CEDB"/>
                     <TextBox Text="{Binding Training.InputSize}"/>
                   </StackPanel>
-                  <StackPanel Width="140" Margin="0,0,8,0">
+                  <StackPanel Grid.Row="0" Grid.Column="1" Margin="0,0,0,6">
                     <TextBlock Text="{x:Static res:UiStrings.Output}" Foreground="#C7CEDB"/>
                     <TextBox Text="{Binding Training.OutputSize}"/>
                   </StackPanel>
-                  <StackPanel Width="160" Margin="0,0,8,0">
+                  <StackPanel Grid.Row="1" Grid.Column="0" Margin="0,0,8,0">
                     <TextBlock Text="{x:Static res:UiStrings.Hidden}" Foreground="#C7CEDB"/>
                     <TextBox Text="{Binding Training.HiddenSizes}" Watermark="4,8,4"/>
                   </StackPanel>
-                  <StackPanel Width="160">
+                  <StackPanel Grid.Row="1" Grid.Column="1">
                     <TextBlock Text="{x:Static res:UiStrings.Activation}" Foreground="#C7CEDB"/>
                     <ComboBox ItemsSource="{Binding Training.ActivationOptions}"
                               SelectedItem="{Binding Training.Activation}"/>
                   </StackPanel>
-                </UniformGrid>
+                </Grid>
               </StackPanel>
+            </StackPanel>
 
-              <Border Height="1" Background="#1F2633" Margin="0,6,0,6"/>
-
-              <StackPanel Spacing="8">
-                <TextBlock Text="{x:Static res:UiStrings.TrainingTitle}" FontWeight="Bold" FontSize="16" Foreground="#E5E5E5"/>
-                <UniformGrid Columns="4" Rows="1" HorizontalAlignment="Left" IsEnabled="{Binding Training.CanEdit}">
-                  <StackPanel Width="140" Margin="0,0,8,0">
+            <StackPanel Grid.Column="1" Spacing="6" Margin="12,0,0,0">
+              <StackPanel Spacing="4">
+                <TextBlock Text="{x:Static res:UiStrings.TrainingTitle}" FontWeight="Bold" Foreground="#E5E5E5"/>
+                <Grid ColumnDefinitions="*,*" RowDefinitions="Auto,Auto" IsEnabled="{Binding Training.CanEdit}">
+                  <StackPanel Grid.Row="0" Grid.Column="0" Margin="0,0,8,6">
                     <TextBlock Text="{x:Static res:UiStrings.Epochs}" Foreground="#C7CEDB"/>
                     <TextBox Text="{Binding Training.EpochsCount}"/>
                   </StackPanel>
-                  <StackPanel Width="140" Margin="0,0,8,0">
+                  <StackPanel Grid.Row="0" Grid.Column="1" Margin="0,0,0,6">
                     <TextBlock Text="{x:Static res:UiStrings.Batch}" Foreground="#C7CEDB"/>
                     <TextBox Text="{Binding Training.BatchSize}"/>
                   </StackPanel>
-                  <StackPanel Width="140" Margin="0,0,8,0">
+                  <StackPanel Grid.Row="1" Grid.Column="0" Margin="0,0,8,0">
                     <TextBlock Text="{x:Static res:UiStrings.Accumulation}" Foreground="#C7CEDB"/>
                     <TextBox Text="{Binding Training.AccumulationSteps}"/>
                   </StackPanel>
-                  <StackPanel Width="160" Margin="0,0,8,0">
+                  <StackPanel Grid.Row="1" Grid.Column="1">
                     <TextBlock Text="{x:Static res:UiStrings.EpochEvery}" Foreground="#C7CEDB"/>
                     <TextBox Text="{Binding Training.EpochDisplayEvery}"/>
                   </StackPanel>
-                </UniformGrid>
-                <StackPanel Orientation="Horizontal" Spacing="8" IsEnabled="{Binding Training.CanEdit}">
-                  <StackPanel Width="160">
+                </Grid>
+                <Grid ColumnDefinitions="*,*" RowDefinitions="Auto" IsEnabled="{Binding Training.CanEdit}">
+                  <StackPanel Grid.Column="0" Margin="0,0,8,0">
                     <TextBlock Text="UI каждые N эпох" Foreground="#C7CEDB"/>
-                    <TextBox Text="{Binding Training.UpdateUiEveryNEpochs}" />
+                    <TextBox Text="{Binding Training.UpdateUiEveryNEpochs}"/>
                   </StackPanel>
-                </StackPanel>
-                <StackPanel Orientation="Horizontal" Spacing="12" IsEnabled="{Binding Training.CanEdit}">
-                  <CheckBox Content="{x:Static res:UiStrings.Shuffle}" IsChecked="{Binding Training.Shuffle}"/>
-                  <CheckBox Content="{x:Static res:UiStrings.DropLast}" IsChecked="{Binding Training.DropLast}"/>
-                </StackPanel>
+                  <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="12" VerticalAlignment="Bottom">
+                    <CheckBox Content="{x:Static res:UiStrings.Shuffle}" IsChecked="{Binding Training.Shuffle}"/>
+                    <CheckBox Content="{x:Static res:UiStrings.DropLast}" IsChecked="{Binding Training.DropLast}"/>
+                  </StackPanel>
+                </Grid>
                 <StackPanel Orientation="Horizontal" Spacing="8">
-                  <Button Content="Начать заново" Command="{Binding Training.NewStartCommand}" MinWidth="140" IsEnabled="{Binding Training.CanStartNew}"/>
+                  <Button Content="Начать заново" Command="{Binding Training.NewStartCommand}" MinWidth="120" IsEnabled="{Binding Training.CanStartNew}"/>
                 </StackPanel>
               </StackPanel>
 
-              <Border Height="1" Background="#1F2633" Margin="0,6,0,6"/>
+              <Border Height="1" Background="#1F2633" Margin="0,2,0,2"/>
 
-              <StackPanel Spacing="8">
-                <TextBlock Text="{x:Static res:UiStrings.OptimizerTitle}" FontWeight="Bold" FontSize="16" Foreground="#E5E5E5"/>
-                <UniformGrid Columns="3" Rows="1" HorizontalAlignment="Left" IsEnabled="{Binding Training.CanEdit}">
-                  <StackPanel Width="120">
+              <StackPanel Spacing="4">
+                <TextBlock Text="{x:Static res:UiStrings.OptimizerTitle}" FontWeight="Bold" Foreground="#E5E5E5"/>
+                <Grid ColumnDefinitions="*,*,*" IsEnabled="{Binding Training.CanEdit}">
+                  <StackPanel Grid.Column="0" Margin="0,0,8,0">
                     <TextBlock Text="{x:Static res:UiStrings.LearningRate}" Foreground="#C7CEDB"/>
                     <TextBox Text="{Binding Training.LearningRate}"/>
                   </StackPanel>
-                  <StackPanel Width="120">
+                  <StackPanel Grid.Column="1" Margin="0,0,8,0">
                     <TextBlock Text="{x:Static res:UiStrings.GradClip}" Foreground="#C7CEDB"/>
                     <TextBox Text="{Binding Training.GradClipNorm}"/>
                   </StackPanel>
-                  <StackPanel Width="120">
+                  <StackPanel Grid.Column="2">
                     <TextBlock Text="{x:Static res:UiStrings.Seed}" Foreground="#C7CEDB"/>
                     <TextBox Text="{Binding Training.Seed}"/>
                   </StackPanel>
-                </UniformGrid>
+                </Grid>
               </StackPanel>
 
-              <Border Height="1" Background="#1F2633" Margin="0,6,0,6"/>
+              <Border Height="1" Background="#1F2633" Margin="0,2,0,2"/>
 
-              <StackPanel Spacing="8">
-                <TextBlock Text="{x:Static res:UiStrings.SaveTitle}" FontWeight="Bold" FontSize="16" Foreground="#E5E5E5"/>
-                <StackPanel Spacing="10" IsEnabled="{Binding Training.CanEdit}">
-                  <StackPanel Spacing="4">
-                    <TextBlock Text="{x:Static res:UiStrings.ModelName}" Foreground="#C7CEDB"/>
-                    <TextBox Text="{Binding Training.ModelName}" Watermark="model_name"/>
-                  </StackPanel>
+              <StackPanel Spacing="4">
+                <TextBlock Text="{x:Static res:UiStrings.SaveTitle}" FontWeight="Bold" Foreground="#E5E5E5"/>
+                <Grid ColumnDefinitions="120,*,32,90" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto" IsEnabled="{Binding Training.CanEdit}">
+                  <TextBlock Grid.Row="0" Grid.Column="0" Text="{x:Static res:UiStrings.ModelName}" Foreground="#C7CEDB" VerticalAlignment="Center"/>
+                  <TextBox Grid.Row="0" Grid.Column="1" Grid.ColumnSpan="3" Text="{Binding Training.ModelName}" Watermark="model_name"/>
 
-                  <Grid ColumnDefinitions="150,*,40,140" RowDefinitions="Auto,Auto,Auto,Auto,Auto">
-                    <TextBlock Grid.Row="0" Grid.Column="0" Text="{x:Static res:UiStrings.SavePath}" Foreground="#C7CEDB" VerticalAlignment="Center"/>
-                    <TextBox Grid.Row="0" Grid.Column="1" Text="{Binding Training.SavePath}" Watermark="(пусто = ML/Models/&lt;name&gt;.json)" Margin="8,0,0,0"/>
-                    <Button Grid.Row="0" Grid.Column="2" Content="..." Width="40" Click="OnBrowseSave" Margin="8,0,0,0"/>
-                    <Button Grid.Row="0" Grid.Column="3" Content="{x:Static res:UiStrings.Save}" Command="{Binding Training.SaveModelCommand}" MinWidth="130" Margin="8,0,0,0"/>
+                  <TextBlock Grid.Row="1" Grid.Column="0" Text="{x:Static res:UiStrings.SavePath}" Foreground="#C7CEDB" VerticalAlignment="Center"/>
+                  <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding Training.SavePath}" Watermark="(пусто = ML/Models/&lt;name&gt;.json)" Margin="6,0,0,0"/>
+                  <Button Grid.Row="1" Grid.Column="2" Content="..." Width="32" Click="OnBrowseSave" Margin="6,0,0,0"/>
+                  <Button Grid.Row="1" Grid.Column="3" Content="Сохр." Command="{Binding Training.SaveModelCommand}" MinWidth="84" Margin="6,0,0,0"/>
 
-                    <TextBlock Grid.Row="1" Grid.Column="0" Text="{x:Static res:UiStrings.LoadPath}" Foreground="#C7CEDB" VerticalAlignment="Center" Margin="0,6,0,0"/>
-                    <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding Training.LoadPath}" Watermark="(пусто = ML/Models/&lt;name&gt;.json)" Margin="8,6,0,0"/>
-                    <Button Grid.Row="1" Grid.Column="2" Content="..." Width="40" Click="OnBrowseLoad" Margin="8,6,0,0"/>
-                    <Button Grid.Row="1" Grid.Column="3" Content="{x:Static res:UiStrings.Load}" Command="{Binding Training.LoadModelCommand}" MinWidth="130" Margin="8,6,0,0"/>
+                  <TextBlock Grid.Row="2" Grid.Column="0" Text="{x:Static res:UiStrings.LoadPath}" Foreground="#C7CEDB" VerticalAlignment="Center"/>
+                  <TextBox Grid.Row="2" Grid.Column="1" Text="{Binding Training.LoadPath}" Watermark="(пусто = ML/Models/&lt;name&gt;.json)" Margin="6,0,0,0"/>
+                  <Button Grid.Row="2" Grid.Column="2" Content="..." Width="32" Click="OnBrowseLoad" Margin="6,0,0,0"/>
+                  <Button Grid.Row="2" Grid.Column="3" Content="Загр." Command="{Binding Training.LoadModelCommand}" MinWidth="84" Margin="6,0,0,0"/>
 
-                    <TextBlock Grid.Row="2" Grid.Column="0" Text="{x:Static res:UiStrings.SaveConfig}" Foreground="#C7CEDB" VerticalAlignment="Center" Margin="0,6,0,0"/>
-                    <TextBox Grid.Row="2" Grid.Column="1" Text="{Binding Training.ConfigSavePath}" Watermark="config.json" Margin="8,6,0,0"/>
-                    <Button Grid.Row="2" Grid.Column="2" Content="..." Width="40" Click="OnBrowseSaveConfig" Margin="8,6,0,0"/>
-                    <Button Grid.Row="2" Grid.Column="3" Content="{x:Static res:UiStrings.SaveConfig}" Click="OnSaveConfig" MinWidth="130" Margin="8,6,0,0"/>
+                  <TextBlock Grid.Row="3" Grid.Column="0" Text="{x:Static res:UiStrings.SaveConfig}" Foreground="#C7CEDB" VerticalAlignment="Center"/>
+                  <TextBox Grid.Row="3" Grid.Column="1" Text="{Binding Training.ConfigSavePath}" Watermark="config.json" Margin="6,0,0,0"/>
+                  <Button Grid.Row="3" Grid.Column="2" Content="..." Width="32" Click="OnBrowseSaveConfig" Margin="6,0,0,0"/>
+                  <Button Grid.Row="3" Grid.Column="3" Content="Сохр. кфг" Click="OnSaveConfig" MinWidth="84" Margin="6,0,0,0"/>
 
-                    <TextBlock Grid.Row="3" Grid.Column="0" Text="{x:Static res:UiStrings.LoadConfig}" Foreground="#C7CEDB" VerticalAlignment="Center" Margin="0,6,0,0"/>
-                    <TextBox Grid.Row="3" Grid.Column="1" Text="{Binding Training.ConfigLoadPath}" Watermark="config.json" Margin="8,6,0,0"/>
-                    <Button Grid.Row="3" Grid.Column="2" Content="..." Width="40" Click="OnBrowseLoadConfig" Margin="8,6,0,0"/>
-                    <Button Grid.Row="3" Grid.Column="3" Content="{x:Static res:UiStrings.LoadConfig}" Click="OnLoadConfig" MinWidth="130" Margin="8,6,0,0"/>
+                  <TextBlock Grid.Row="4" Grid.Column="0" Text="{x:Static res:UiStrings.LoadConfig}" Foreground="#C7CEDB" VerticalAlignment="Center"/>
+                  <TextBox Grid.Row="4" Grid.Column="1" Text="{Binding Training.ConfigLoadPath}" Watermark="config.json" Margin="6,0,0,0"/>
+                  <Button Grid.Row="4" Grid.Column="2" Content="..." Width="32" Click="OnBrowseLoadConfig" Margin="6,0,0,0"/>
+                  <Button Grid.Row="4" Grid.Column="3" Content="Загр. кфг" Click="OnLoadConfig" MinWidth="84" Margin="6,0,0,0"/>
 
-                    <TextBlock Grid.Row="4" Grid.Column="0" Text="{x:Static res:UiStrings.ExportMetrics}" Foreground="#C7CEDB" VerticalAlignment="Center" Margin="0,6,0,0"/>
-                    <TextBox Grid.Row="4" Grid.Column="1" Text="{Binding Training.MetricsExportPath}" Watermark="metrics.csv" Margin="8,6,0,0"/>
-                    <Button Grid.Row="4" Grid.Column="2" Content="..." Width="40" Click="OnBrowseExportMetrics" Margin="8,6,0,0"/>
-                    <Button Grid.Row="4" Grid.Column="3" Content="{x:Static res:UiStrings.ExportMetrics}" Click="OnExportMetrics" MinWidth="130" Margin="8,6,0,0"/>
-                  </Grid>
-                </StackPanel>
-                <CheckBox Content="{x:Static res:UiStrings.AutoExport}" IsChecked="{Binding Training.AutoExportArtifacts}" Margin="0,6,0,0"/>
+                  <TextBlock Grid.Row="5" Grid.Column="0" Text="{x:Static res:UiStrings.ExportMetrics}" Foreground="#C7CEDB" VerticalAlignment="Center"/>
+                  <TextBox Grid.Row="5" Grid.Column="1" Text="{Binding Training.MetricsExportPath}" Watermark="metrics.csv" Margin="6,0,0,0"/>
+                  <Button Grid.Row="5" Grid.Column="2" Content="..." Width="32" Click="OnBrowseExportMetrics" Margin="6,0,0,0"/>
+                  <Button Grid.Row="5" Grid.Column="3" Content="Экспорт" Click="OnExportMetrics" MinWidth="84" Margin="6,0,0,0"/>
+                </Grid>
+                <CheckBox Content="{x:Static res:UiStrings.AutoExport}" IsChecked="{Binding Training.AutoExportArtifacts}" Margin="0,4,0,0"/>
               </StackPanel>
-
-              <TextBlock Text="По умолчанию доступны демо-примеры (XOR/AND/порог). Загрузите свой датасет или модель для работы с реальными данными." FontSize="12" Foreground="#6C7687"/>
             </StackPanel>
-          </Border>
-        </ScrollViewer>
+          </Grid>
+        </Border>
       </TabItem>
 
       <TabItem Header="{x:Static res:UiStrings.TabMetrics}">
-        <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
-          <Border Padding="12">
-            <StackPanel Spacing="12">
+        <Border Padding="12">
+          <StackPanel Spacing="6">
               <UniformGrid Columns="3" Rows="1" Margin="0,0,0,8">
                 <Border Background="#161B23" CornerRadius="8" Padding="12" Margin="0,0,8,0">
                   <StackPanel>
@@ -242,52 +253,73 @@
                     <TextBlock Text="{x:Static res:UiStrings.LossCurve}" Foreground="#E5E5E5" FontWeight="Bold"/>
                     <lvcAvalonia:CartesianChart x:Name="LossChart"
                                                 Series="{Binding Training.Series}"
-                                                Height="420"
-                                                LegendPosition="Right"
+                                                Height="400"
+                                                LegendPosition="Top"
                                                 LegendTextPaint="{StaticResource ChartAxisPaint}">
                       <lvcAvalonia:CartesianChart.XAxes>
                         <lvc:Axis Name="Эпоха"
                                   MinLimit="1"
-                                  LabelsPaint="{StaticResource ChartAxisPaint}"
-                                  SeparatorsPaint="{StaticResource ChartGridPaint}" />
+                                  LabelsPaint="{x:Null}"
+                                  SeparatorsPaint="{x:Null}" />
                       </lvcAvalonia:CartesianChart.XAxes>
                       <lvcAvalonia:CartesianChart.YAxes>
                         <lvc:Axis Name="Потеря"
-                                  LabelsPaint="{StaticResource ChartAxisPaint}"
-                                  SeparatorsPaint="{StaticResource ChartGridPaint}" />
+                                  LabelsPaint="{x:Null}"
+                                  SeparatorsPaint="{x:Null}" />
+                        <lvc:Axis Name="Accuracy"
+                                  MinLimit="0"
+                                  MaxLimit="1"
+                                  Position="End"
+                                  LabelsPaint="{x:Null}"
+                                  SeparatorsPaint="{x:Null}" />
                       </lvcAvalonia:CartesianChart.YAxes>
                     </lvcAvalonia:CartesianChart>
                   </StackPanel>
                 </Border>
 
                 <Border Grid.Column="1" Background="#11161F" CornerRadius="10" Padding="12" BorderBrush="#1F2633" BorderThickness="1">
-                  <StackPanel Spacing="8">
-                    <TextBlock Text="{x:Static res:UiStrings.Logs}" Foreground="#E5E5E5" FontWeight="Bold"/>
-                    <ListBox ItemsSource="{Binding Training.Logs}"
-                             Height="360"
-                             Background="#0F1115"
-                             Foreground="#E5E5E5"
-                             BorderBrush="#1F2633"
-                             BorderThickness="1"
-                             Padding="6">
-                      <ListBox.ItemsPanel>
-                        <ItemsPanelTemplate>
-                          <VirtualizingStackPanel/>
-                        </ItemsPanelTemplate>
-                      </ListBox.ItemsPanel>
-                    </ListBox>
-                  </StackPanel>
+                  <Grid RowDefinitions="Auto,*">
+                    <Grid ColumnDefinitions="*,Auto">
+                      <TextBlock Text="{x:Static res:UiStrings.Logs}" Foreground="#E5E5E5" FontWeight="Bold"/>
+                      <Button Grid.Column="1" Content="Вниз" Click="OnScrollLogsDown" MinWidth="60"/>
+                    </Grid>
+                    <Border Grid.Row="1"
+                            Background="#0F1115"
+                            BorderBrush="#1F2633"
+                            BorderThickness="1">
+                      <ListBox x:Name="LogsList"
+                               ItemsSource="{Binding Training.LogLines}"
+                               Background="Transparent"
+                               BorderThickness="0"
+                               FontFamily="Consolas"
+                               FontSize="14"
+                               ScrollViewer.VerticalScrollBarVisibility="Auto"
+                               ScrollViewer.HorizontalScrollBarVisibility="Auto"
+                               Padding="6">
+                        <ListBox.ItemsPanel>
+                          <ItemsPanelTemplate>
+                            <VirtualizingStackPanel/>
+                          </ItemsPanelTemplate>
+                        </ListBox.ItemsPanel>
+                        <ListBox.ItemTemplate>
+                          <DataTemplate>
+                            <TextBlock Text="{Binding Text}"
+                                       TextWrapping="NoWrap"
+                                       Margin="0,2"/>
+                          </DataTemplate>
+                        </ListBox.ItemTemplate>
+                      </ListBox>
+                    </Border>
+                  </Grid>
                 </Border>
               </Grid>
-            </StackPanel>
-          </Border>
-        </ScrollViewer>
+          </StackPanel>
+        </Border>
       </TabItem>
 
       <TabItem Header="{x:Static res:UiStrings.TabInference}">
-        <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
-          <Border Padding="12">
-            <StackPanel Spacing="12">
+        <Border Padding="12">
+          <StackPanel Spacing="8">
               <TextBlock Text="{x:Static res:UiStrings.InferenceTitle}" FontWeight="Bold" FontSize="16" Foreground="#E5E5E5"/>
 
               <Grid ColumnDefinitions="170,*,110,120" RowDefinitions="Auto,Auto,Auto">
@@ -315,10 +347,10 @@
               </StackPanel>
 
               <TextBlock Text="{Binding Inference.Status}" Foreground="#9BA5B5"/>
-            </StackPanel>
-          </Border>
-        </ScrollViewer>
+          </StackPanel>
+        </Border>
       </TabItem>
     </TabControl>
-  </Grid>
+    </Grid>
+  </Viewbox>
 </Window>

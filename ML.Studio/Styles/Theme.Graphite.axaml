@@ -1,0 +1,20 @@
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+  <Color x:Key="Color.Background">#202124</Color>
+  <Color x:Key="Color.Panel">#2A2B2F</Color>
+  <Color x:Key="Color.PanelAlt">#33343A</Color>
+  <Color x:Key="Color.Border">#4A4B52</Color>
+  <Color x:Key="Color.Text">#E0E0E0</Color>
+  <Color x:Key="Color.TextMuted">#A7A7A7</Color>
+  <Color x:Key="Color.Accent">#5C7CFA</Color>
+  <Color x:Key="Color.Selection">#3A3B42</Color>
+
+  <SolidColorBrush x:Key="Brush.Background" Color="{DynamicResource Color.Background}" />
+  <SolidColorBrush x:Key="Brush.Panel" Color="{DynamicResource Color.Panel}" />
+  <SolidColorBrush x:Key="Brush.PanelAlt" Color="{DynamicResource Color.PanelAlt}" />
+  <SolidColorBrush x:Key="Brush.Border" Color="{DynamicResource Color.Border}" />
+  <SolidColorBrush x:Key="Brush.Text" Color="{DynamicResource Color.Text}" />
+  <SolidColorBrush x:Key="Brush.TextMuted" Color="{DynamicResource Color.TextMuted}" />
+  <SolidColorBrush x:Key="Brush.Accent" Color="{DynamicResource Color.Accent}" />
+  <SolidColorBrush x:Key="Brush.Selection" Color="{DynamicResource Color.Selection}" />
+</ResourceDictionary>

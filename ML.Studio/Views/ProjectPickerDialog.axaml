@@ -1,0 +1,24 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="ML.Studio.Views.ProjectPickerDialog"
+        Width="420"
+        Height="360"
+        WindowStartupLocation="CenterOwner"
+        Title="Открыть проект">
+  <DockPanel Margin="12" LastChildFill="True">
+    <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+      <Button Content="Открыть" IsDefault="True" Click="OnOk" />
+      <Button Content="Отмена" IsCancel="True" Click="OnCancel" />
+    </StackPanel>
+    <StackPanel Spacing="8">
+      <TextBlock Text="Выберите проект" />
+      <ListBox ItemsSource="{Binding Projects}" SelectedItem="{Binding SelectedProject}">
+        <ListBox.ItemTemplate>
+          <DataTemplate>
+            <TextBlock Text="{Binding name}" />
+          </DataTemplate>
+        </ListBox.ItemTemplate>
+      </ListBox>
+    </StackPanel>
+  </DockPanel>
+</Window>

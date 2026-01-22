@@ -16,6 +16,7 @@ public sealed class ExperimentConfig
     public int BatchSize { get; init; }
     public int AccumulationSteps { get; init; }
     public int EpochDisplayEvery { get; init; }
+    public int UpdateUiEveryNEpochs { get; init; } = 1;
     public bool Shuffle { get; init; }
     public bool DropLast { get; init; }
 

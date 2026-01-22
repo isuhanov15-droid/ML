@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Collections.Concurrent;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.Globalization;
@@ -7,28 +8,27 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using System.Text.Json;
-using System.Threading;
 using System.Threading.Tasks;
 using Avalonia.Threading;
 using LiveChartsCore;
+using LiveChartsCore.Defaults;
 using LiveChartsCore.SkiaSharpView;
 using ML.Core;
 using ML.Core.Examples;
-using ML.Core.Layers;
-using ML.Core.Serialization;
-using ML.Core.Training;
+using ML.Core.Path;
 using ML.Gui.Models;
 using ML.Gui.Services;
 using ML.Gui.Utils;
-using ML.Core.Path;
 
 namespace ML.Gui.ViewModels;
 
-public sealed class TrainingViewModel : ViewModelBase
+public sealed class TrainingViewModel : ViewModelBase, IDisposable
 {
-    private readonly TrainingHost _host = new();
-    private CancellationTokenSource? _sessionCts;
-    private CancellationTokenSource? _accuracyCts;
+    private readonly ConnectionService _connection;
+    private readonly TrainingRemoteService _training;
+    private readonly ModelStoreRemoteService _modelStore;
+    private readonly SettingsService _settingsService;
+    private readonly SettingsData _settings;
 
     private TrainingState _state = TrainingState.Idle;
     private string _status = "Готов";
@@ -55,32 +55,35 @@ public sealed class TrainingViewModel : ViewModelBase
     private int _epochDisplayEvery = 1;
     private ExamplePreset? _selectedPreset;
 
-    private readonly ObservableCollection<double> _trainLossValues = new();
-    private readonly ObservableCollection<double?> _valLossValues = new();
-    private Task? _runningTask;
+    private readonly ObservableCollection<ObservablePoint> _trainLossPoints = new();
+    private readonly ObservableCollection<ObservablePoint> _valLossPoints = new();
+    private readonly ObservableCollection<ObservablePoint> _accPoints = new();
+    private LineSeries<ObservablePoint>? _trainSeries;
+    private LineSeries<ObservablePoint>? _valSeries;
+    private LineSeries<ObservablePoint>? _accSeries;
+    private int? _lastTrainEpoch;
+    private int? _lastValEpoch;
+    private int? _lastAccEpoch;
     private const int MaxEpochRows = 500;
-    private const int MaxChartPoints = 500;
-    private const int UiPumpIntervalMs = 250;
-    private const int AccuracyEveryEpochs = 10;
-    private string _logText = "";
+    private int _maxChartPoints = 500;
+    private const int UiPumpIntervalMs = 100;
     private readonly Stopwatch _stopwatch = new();
     private DispatcherTimer? _elapsedTimer;
     private DispatcherTimer? _uiPumpTimer;
     private string _elapsedText = "00:00:00";
     private bool _autoExportArtifacts = true;
-    private readonly object _metricsLock = new();
-    private readonly object _logLock = new();
-    private readonly List<string> _fullLogs = new();
-    private int _lastUiLogIndex;
-    private bool _pendingUiLogFlush;
-    private bool _pendingUiChartUpdate;
-    private bool _forceFinalUiUpdate;
-    private int _lastUiChartIndex;
+    private readonly ConcurrentQueue<MetricPoint> _metricQueue = new();
+    private readonly ConcurrentQueue<LogLineVm> _logQueue = new();
     private readonly List<TrainingMetricsSnapshot> _allSnapshots = new();
+    private readonly Dictionary<int, int> _epochIndex = new();
+    private readonly List<LogLineVm> _logWindow = new();
+    private const int MaxDrainPerTick = 5000;
+    private const int DefaultMaxLogLines = 20000;
+    private bool _chartCappedLogged;
     private double? _lastAccuracy;
-    private Task? _accuracyTask;
     private int _updateUiEveryNEpochs = 10;
-    private const int MaxLogLines = 1000;
+    private int _maxLogLines = DefaultMaxLogLines;
+    private bool _isAutoScrollEnabled = true;
     private int _lastStopEpoch;
     private string _stopReason = "";
     private bool _hasCheckpoint;
@@ -88,46 +91,105 @@ public sealed class TrainingViewModel : ViewModelBase
     private int _epochStart;
     private int _runPlannedEpochs;
 
-    public TrainingViewModel()
+    public TrainingViewModel(
+        ConnectionService connection,
+        TrainingRemoteService training,
+        ModelStoreRemoteService modelStore,
+        SettingsService settingsService)
     {
+        _connection = connection ?? throw new ArgumentNullException(nameof(connection));
+        _training = training ?? throw new ArgumentNullException(nameof(training));
+        _modelStore = modelStore ?? throw new ArgumentNullException(nameof(modelStore));
+        _settingsService = settingsService ?? throw new ArgumentNullException(nameof(settingsService));
+        _settings = _settingsService.Load();
+
         StartCommand = new AsyncRelayCommand(StartAsync, () => CanStart || CanResume || CanStartNew);
         StopCommand = new RelayCommand(Stop, () => CanStop);
-        SaveModelCommand = new RelayCommand(SaveModel, () => !IsBusy);
-        LoadModelCommand = new RelayCommand(LoadModel, () => !IsBusy);
+        SaveModelCommand = new AsyncRelayCommand(SaveModelAsync, () => !IsBusy);
+        LoadModelCommand = new AsyncRelayCommand(LoadModelAsync, () => !IsBusy);
         NewStartCommand = new AsyncRelayCommand(StartFreshAsync, () => CanStartNew);
         ApplyPresetCommand = new RelayCommand(() => { if (SelectedPreset != null) ApplyPreset(SelectedPreset); });
 
-        Series = new ISeries[]
+        _trainSeries = new LineSeries<ObservablePoint>
         {
-            new LineSeries<double>
-            {
-                Name = "Train loss",
-                Values = _trainLossValues
-            },
-            new LineSeries<double?>
-            {
-                Name = "Val loss",
-                Values = _valLossValues
-            }
+            Name = "Train loss",
+            Values = _trainLossPoints,
+            GeometrySize = 0,
+            GeometryStroke = null,
+            GeometryFill = null,
+            Fill = null
         };
+        _valSeries = new LineSeries<ObservablePoint>
+        {
+            Name = "Val loss",
+            Values = _valLossPoints,
+            GeometrySize = 0,
+            GeometryStroke = null,
+            GeometryFill = null,
+            Fill = null
+        };
+        _accSeries = new LineSeries<ObservablePoint>
+        {
+            Name = "Accuracy",
+            Values = _accPoints,
+            GeometrySize = 0,
+            GeometryStroke = null,
+            GeometryFill = null,
+            Fill = null,
+            IsVisible = false
+        };
+
+        Series = new ISeries[] { _trainSeries, _valSeries, _accSeries };
+
+        _training.MetricsReceived += OnMetric;
+        _training.LogReceived += EnqueueLog;
+        _training.TrainStateChanged += OnRemoteStateChanged;
+        _training.RunIdChanged += _ =>
+        {
+            OnPropertyChanged(nameof(CanResume));
+            OnPropertyChanged(nameof(StartButtonText));
+            StartCommand.RaiseCanExecuteChanged();
+        };
+
+        _connection.ConnectionChanged += _ =>
+        {
+            OnPropertyChanged(nameof(CanStart));
+            OnPropertyChanged(nameof(CanStartNew));
+            OnPropertyChanged(nameof(CanResume));
+            OnPropertyChanged(nameof(CanStop));
+            StartCommand.RaiseCanExecuteChanged();
+            StopCommand.RaiseCanExecuteChanged();
+            NewStartCommand.RaiseCanExecuteChanged();
+        };
+
+        SavePath = _settings.LastSavePath ?? "";
+        LoadPath = _settings.LastLoadPath ?? "";
 
         // default preset
         SelectedPreset = Presets.FirstOrDefault();
+        if (!string.IsNullOrWhiteSpace(_settings.LastPreset))
+        {
+            var preset = Presets.FirstOrDefault(p => p.Name == _settings.LastPreset);
+            if (preset != null)
+                SelectedPreset = preset;
+        }
     }
 
     public ObservableCollection<EpochViewModel> Epochs { get; } = new();
-    public ObservableCollection<string> Logs { get; } = new();
-    public ObservableCollection<double> TrainLossValues => _trainLossValues;
-    public ObservableCollection<double?> ValLossValues => _valLossValues;
-    public string LogText
-    {
-        get => _logText;
-        private set => SetField(ref _logText, value);
-    }
+    public ObservableCollection<LogLineVm> LogLines { get; } = new();
+    public ObservableCollection<ObservablePoint> TrainLossPoints => _trainLossPoints;
+    public ObservableCollection<ObservablePoint> ValLossPoints => _valLossPoints;
+    public ObservableCollection<ObservablePoint> AccuracyPoints => _accPoints;
     public bool AutoExportArtifacts
     {
         get => _autoExportArtifacts;
         set => SetField(ref _autoExportArtifacts, value);
+    }
+
+    public bool IsAutoScrollEnabled
+    {
+        get => _isAutoScrollEnabled;
+        set => SetField(ref _isAutoScrollEnabled, value);
     }
     public IReadOnlyList<ExamplePreset> Presets { get; } = ExampleRegistry.Presets;
     public ExamplePreset? SelectedPreset
@@ -136,7 +198,11 @@ public sealed class TrainingViewModel : ViewModelBase
         set
         {
             if (SetField(ref _selectedPreset, value) && value != null)
+            {
                 ApplyPreset(value);
+                _settings.LastPreset = value.Name;
+                _settingsService.Save(_settings);
+            }
         }
     }
 
@@ -169,10 +235,10 @@ public sealed class TrainingViewModel : ViewModelBase
     public bool IsBusy => State is TrainingState.Running or TrainingState.Stopping;
     public bool IsNotBusy => !IsBusy;
     public bool CanEdit => State is TrainingState.Idle or TrainingState.Finished or TrainingState.Error or TrainingState.Stopped;
-    public bool CanStart => State is TrainingState.Idle or TrainingState.Finished or TrainingState.Error;
-    public bool CanStartNew => CanStart || State is TrainingState.Stopped;
-    public bool CanResume => State is TrainingState.Stopped && HasCheckpointInMemory;
-    public bool CanStop => State is TrainingState.Running or TrainingState.Stopping;
+    public bool CanStart => _connection.IsConnected && (State is TrainingState.Idle or TrainingState.Finished or TrainingState.Error);
+    public bool CanStartNew => _connection.IsConnected && (CanStart || State is TrainingState.Stopped);
+    public bool CanResume => _connection.IsConnected && State is TrainingState.Stopped && HasCheckpointInMemory;
+    public bool CanStop => _connection.IsConnected && State is TrainingState.Running or TrainingState.Stopping;
 
     public string Status
     {
@@ -321,13 +387,27 @@ public sealed class TrainingViewModel : ViewModelBase
     public string SavePath
     {
         get => _savePath;
-        set => SetField(ref _savePath, value);
+        set
+        {
+            if (SetField(ref _savePath, value))
+            {
+                _settings.LastSavePath = value;
+                _settingsService.Save(_settings);
+            }
+        }
     }
 
     public string LoadPath
     {
         get => _loadPath;
-        set => SetField(ref _loadPath, value);
+        set
+        {
+            if (SetField(ref _loadPath, value))
+            {
+                _settings.LastLoadPath = value;
+                _settingsService.Save(_settings);
+            }
+        }
     }
 
     public void SetSavePath(string path) => SavePath = path;
@@ -354,35 +434,45 @@ public sealed class TrainingViewModel : ViewModelBase
     public int EpochDisplayEvery
     {
         get => _epochDisplayEvery;
-        set => SetField(ref _epochDisplayEvery, value <= 0 ? 1 : value);
+        set
+        {
+            var v = value <= 0 ? 1 : value;
+            if (SetField(ref _epochDisplayEvery, v))
+            {
+                if (_updateUiEveryNEpochs != v)
+                {
+                    _updateUiEveryNEpochs = v;
+                    OnPropertyChanged(nameof(UpdateUiEveryNEpochs));
+                }
+            }
+        }
     }
 
     public int UpdateUiEveryNEpochs
     {
         get => _updateUiEveryNEpochs;
-        set => SetField(ref _updateUiEveryNEpochs, value <= 0 ? 1 : value);
+        set
+        {
+            var v = value <= 0 ? 1 : value;
+            if (SetField(ref _updateUiEveryNEpochs, v))
+            {
+                if (_epochDisplayEvery != v)
+                {
+                    _epochDisplayEvery = v;
+                    OnPropertyChanged(nameof(EpochDisplayEvery));
+                }
+            }
+        }
     }
 
     public AsyncRelayCommand StartCommand { get; }
     public RelayCommand StopCommand { get; }
-    public RelayCommand SaveModelCommand { get; }
-    public RelayCommand LoadModelCommand { get; }
+    public AsyncRelayCommand SaveModelCommand { get; }
+    public AsyncRelayCommand LoadModelCommand { get; }
     public AsyncRelayCommand NewStartCommand { get; }
     public RelayCommand ApplyPresetCommand { get; }
 
     public ISeries[] Series { get; }
-
-    /// <summary>
-    /// Configure training pipeline from the hosting app (model/optimizer/loss/data).
-    /// </summary>
-    public void Configure(
-        Func<Network> networkFactory,
-        Func<Network, Trainer> trainerFactory,
-        Func<IEnumerable<(double[] x, int y)>> trainProvider,
-        Func<IEnumerable<(double[] x, int y)>?>? valProvider = null)
-    {
-        _host.Configure(networkFactory, trainerFactory, trainProvider, valProvider);
-    }
 
     private void ApplyPreset(ExamplePreset preset)
     {
@@ -397,44 +487,40 @@ public sealed class TrainingViewModel : ViewModelBase
         Shuffle = preset.Shuffle;
         DropLast = preset.DropLast;
         Seed = Seed; // keep user seed
-
-        _host.SetDataProviders(
-            () => preset.BuildTrain(preset.RequiresDatasetPath ? DatasetPath : null),
-            () => preset.BuildVal(preset.RequiresDatasetPath ? DatasetPath : null));
     }
 
-    public Network BuildNetworkFromState()
+    public TrainStartConfig BuildStartConfig(bool resume, int plannedEpochs)
     {
-        var net = new Network();
         var hidden = ParseHiddenSizes();
+        var (presetKey, datasetPath) = ResolvePreset();
 
-        int last = InputSize;
-        int seed = Seed ?? 123;
-
-        foreach (var h in hidden)
+        return new TrainStartConfig
         {
-            net.Add(new LinearLayer(last, h, seed++));
-            net.Add(new ActivationLayer(h, Activation));
-            last = h;
-        }
-
-        net.Add(new LinearLayer(last, OutputSize, seed++));
-        net.Add(new SoftmaxLayer(OutputSize));
-
-        return net;
-    }
-
-    public TrainOptions BuildOptions(int? overrideEpochs = null)
-    {
-        return new TrainOptions
-        {
-            Epochs = overrideEpochs ?? EpochsCount,
-            BatchSize = BatchSize,
-            Shuffle = Shuffle,
-            DropLast = DropLast,
-            GradClipNorm = GradClipNorm,
-            GradientAccumulationSteps = AccumulationSteps,
-            Seed = Seed
+            Resume = resume,
+            Network = new TrainNetworkConfig
+            {
+                InputSize = InputSize,
+                OutputSize = OutputSize,
+                Hidden = hidden,
+                Activation = Activation.ToString(),
+                Seed = Seed
+            },
+            Train = new TrainTrainConfig
+            {
+                Epochs = plannedEpochs,
+                BatchSize = BatchSize,
+                Shuffle = Shuffle,
+                DropLast = DropLast,
+                GradClipNorm = GradClipNorm,
+                AccumulationSteps = AccumulationSteps,
+                LearningRate = LearningRate,
+                UiEveryNEpochs = EpochDisplayEvery
+            },
+            Data = new TrainDataConfig
+            {
+                Preset = presetKey,
+                DatasetPath = datasetPath
+            }
         };
     }
 
@@ -451,6 +537,20 @@ public sealed class TrainingViewModel : ViewModelBase
         return sizes.Length == 0 ? new[] { 4 } : sizes;
     }
 
+    private (string presetKey, string? datasetPath) ResolvePreset()
+    {
+        if (RequiresDatasetPath)
+            return ("FILE", DatasetPath);
+
+        var name = SelectedPreset?.Name ?? "";
+        if (name.Contains("XOR", StringComparison.OrdinalIgnoreCase))
+            return ("XOR", null);
+        if (name.Contains("AND", StringComparison.OrdinalIgnoreCase))
+            return ("AND", null);
+
+        return (string.Empty, null);
+    }
+
     private Task StartAsync() => StartInternalAsync(resume: CanResume);
 
     private Task StartFreshAsync()
@@ -461,33 +561,32 @@ public sealed class TrainingViewModel : ViewModelBase
         return StartInternalAsync(resume: false);
     }
 
-    private Task StartInternalAsync(bool resume)
+    private async Task StartInternalAsync(bool resume)
     {
-        if ((!CanStart && !resume && !CanStartNew) || _runningTask is { IsCompleted: false })
+        if ((!CanStart && !resume && !CanStartNew) || IsBusy)
         {
             Status = "Уже идёт обучение.";
-            return Task.CompletedTask;
+            return;
         }
 
-        if (!_host.IsConfigured)
+        if (!await EnsureConnectedAsync())
         {
-            State = TrainingState.Error;
-            Status = "Нет конфигурации тренировки: вызовите Configure(...) из кода.";
-            return Task.CompletedTask;
+            Status = "Нет подключения к ML.Host.";
+            return;
         }
 
         if (EpochsCount <= 0 || BatchSize <= 0 || AccumulationSteps <= 0 || InputSize <= 0 || OutputSize <= 0)
         {
             State = TrainingState.Error;
             Status = "Проверьте размеры и Epochs/BatchSize/AccumSteps (>0).";
-            return Task.CompletedTask;
+            return;
         }
 
         if (RequiresDatasetPath && string.IsNullOrWhiteSpace(DatasetPath))
         {
             State = TrainingState.Error;
             Status = "Укажите путь к датасету (CSV/JSON).";
-            return Task.CompletedTask;
+            return;
         }
 
         if (!resume)
@@ -498,91 +597,40 @@ public sealed class TrainingViewModel : ViewModelBase
         StartElapsedTimer();
         StartUiPump();
 
-        _sessionCts = new CancellationTokenSource();
-        if (resume)
-        {
-            _host.PrepareResume();
-            EpochStart = LastStopEpoch;
-        }
-        else
-        {
-            EpochStart = 0;
-        }
-
+        EpochStart = resume ? LastStopEpoch : 0;
         _runPlannedEpochs = resume && LastStopEpoch > 0 ? Math.Max(1, EpochsCount - LastStopEpoch) : EpochsCount;
-        if (_runPlannedEpochs < UpdateUiEveryNEpochs)
-            _updateUiEveryNEpochs = 1;
-        else
-            _updateUiEveryNEpochs = UpdateUiEveryNEpochs;
+        _updateUiEveryNEpochs = _runPlannedEpochs < EpochDisplayEvery ? 1 : EpochDisplayEvery;
+        var expectedPoints = Math.Max(1, _runPlannedEpochs / Math.Max(1, _updateUiEveryNEpochs));
+        _maxChartPoints = Math.Max(5000, expectedPoints + 2);
+        _maxLogLines = Math.Max(DefaultMaxLogLines, expectedPoints + 10);
+
+        var (presetKey, _) = ResolvePreset();
+        if (string.IsNullOrWhiteSpace(presetKey))
+        {
+            State = TrainingState.Error;
+            Status = "Выбранный пресет не поддерживается ML.Host.";
+            StopElapsedTimer();
+            StopUiPump();
+            return;
+        }
 
         try
         {
-            var effectiveEpochs = _runPlannedEpochs;
-            var options = BuildOptions(effectiveEpochs);
-            _runningTask = _host.StartAsync(options, OnEpoch, _sessionCts.Token, useCheckpoint: resume);
-            Status = "Обучение...";
-
-            _ = _runningTask.ContinueWith(t =>
-            {
-                Dispatcher.UIThread.Post(() =>
-                {
-                    if (t.IsCanceled)
-                    {
-                        Status = $"Остановлено на эпохе {LastStopEpoch}";
-                        StopReason = "Остановлено пользователем";
-                        State = TrainingState.Stopped;
-                        HasCheckpointInMemory = _host.HasCheckpoint;
-                        _forceFinalUiUpdate = true;
-                    }
-                    else if (t.IsFaulted)
-                    {
-                        Status = $"Ошибка: {t.Exception?.GetBaseException().Message}";
-                        StopReason = Status;
-                        State = TrainingState.Error;
-                        if (t.Exception != null)
-                            AddLogLine($"Ошибка обучения: {t.Exception.GetBaseException().Message}");
-                        _forceFinalUiUpdate = true;
-                    }
-                    else
-                    {
-                        Status = "Обучение завершено";
-                        StopReason = "Завершено";
-                        State = TrainingState.Finished;
-                        LastStopEpoch = EpochCurrent;
-                        HasCheckpointInMemory = _host.HasCheckpoint;
-                        TryAutoExportArtifacts();
-                        _forceFinalUiUpdate = true;
-                    }
-
-                    if (_forceFinalUiUpdate)
-                        PumpUi();
-
-                    StopElapsedTimer();
-                    StopUiPump();
-                    CancelAccuracyComputation();
-                    _sessionCts?.Dispose();
-                    _sessionCts = null;
-                    _runningTask = null;
-                    StartCommand.RaiseCanExecuteChanged();
-                });
-            });
+            var config = BuildStartConfig(resume, _runPlannedEpochs);
+            AddLogLine($"Train started. epochs={config.Train.Epochs}, uiEvery={config.Train.UiEveryNEpochs}");
+            await _training.StartAsync(config);
         }
         catch (Exception ex)
         {
             StopElapsedTimer();
             StopUiPump();
-            CancelAccuracyComputation();
-            _sessionCts?.Dispose();
-            _sessionCts = null;
             Dispatcher.UIThread.Post(() =>
             {
                 Status = $"Запуск не удался: {ex.GetBaseException().Message}";
                 State = TrainingState.Error;
-                AddLogLine($"Ошибка запуска: {ex.GetBaseException().Message}");
+                AddLogLine($"Error: {ex.GetBaseException().Message}");
             });
         }
-
-        return Task.CompletedTask;
     }
 
     private void Stop()
@@ -591,17 +639,23 @@ public sealed class TrainingViewModel : ViewModelBase
         Status = "Остановка...";
         State = TrainingState.Stopping;
         StopReason = "Остановлено пользователем";
-        _host.Stop();
-        _sessionCts?.Cancel();
-        CancelAccuracyComputation();
+        _ = _training.StopAsync();
     }
 
-    private void SaveModel()
+    private async Task SaveModelAsync()
     {
         try
         {
-            _host.SaveModel(ModelName, string.IsNullOrWhiteSpace(SavePath) ? null : SavePath);
-            Status = $"Сохранено: {(string.IsNullOrWhiteSpace(SavePath) ? ModelName : SavePath)}";
+            if (!await EnsureConnectedAsync())
+            {
+                Status = "Нет подключения к ML.Host.";
+                return;
+            }
+
+            var result = await _modelStore.SaveAsync(ModelName, string.IsNullOrWhiteSpace(SavePath) ? null : SavePath);
+            Status = result.Ok
+                ? $"Сохранено: {(string.IsNullOrWhiteSpace(SavePath) ? ModelName : SavePath)}"
+                : $"Сохранение не удалось: {result.Message}";
         }
         catch (Exception ex)
         {
@@ -609,13 +663,20 @@ public sealed class TrainingViewModel : ViewModelBase
         }
     }
 
-    private void LoadModel()
+    private async Task LoadModelAsync()
     {
         try
         {
-            _host.LoadModel(ModelName, string.IsNullOrWhiteSpace(LoadPath) ? null : LoadPath);
-            ApplyLoadedNetwork();
-            Status = $"Загружена модель: {(string.IsNullOrWhiteSpace(LoadPath) ? ModelName : LoadPath)}";
+            if (!await EnsureConnectedAsync())
+            {
+                Status = "Нет подключения к ML.Host.";
+                return;
+            }
+
+            var result = await _modelStore.LoadAsync(ModelName, string.IsNullOrWhiteSpace(LoadPath) ? null : LoadPath);
+            Status = result.Ok
+                ? $"Загружена модель: {(string.IsNullOrWhiteSpace(LoadPath) ? ModelName : LoadPath)}"
+                : $"Загрузка не удалась: {result.Message}";
         }
         catch (Exception ex)
         {
@@ -623,87 +684,157 @@ public sealed class TrainingViewModel : ViewModelBase
         }
     }
 
-    private void ApplyLoadedNetwork()
+    private void OnRemoteStateChanged(TrainingState state, string? message)
     {
-        var net = _host.CurrentNetwork;
-        if (net == null) return;
-
-        var linears = net.Layers.OfType<LinearLayer>().ToList();
-        if (linears.Count > 0)
+        Dispatcher.UIThread.Post(() =>
         {
-            InputSize = linears.First().InputSize;
-            OutputSize = linears.Last().OutputSize;
-            var hidden = linears.Skip(1).Take(linears.Count - 2).Select(l => l.OutputSize).ToArray();
-            HiddenSizes = hidden.Length > 0 ? string.Join(",", hidden) : "";
-        }
+            State = state;
+            if (!string.IsNullOrWhiteSpace(message))
+                Status = message;
 
-        var firstActivation = net.Layers.OfType<ActivationLayer>().FirstOrDefault();
-        if (firstActivation != null)
-            Activation = firstActivation.Type;
+            switch (state)
+            {
+                case TrainingState.Finished:
+                    Status = "Обучение завершено.";
+                    StopElapsedTimer();
+                    StopUiPump();
+                    HasCheckpointInMemory = true;
+                    LastStopEpoch = EpochCurrent;
+                    AddLogLine($"Finished at epoch {EpochCurrent}");
+                    PumpUi(maxDrain: int.MaxValue, force: true);
+                    TryAutoExportArtifacts();
+                    break;
+                case TrainingState.Stopped:
+                    Status = "Остановлено.";
+                    StopElapsedTimer();
+                    StopUiPump();
+                    HasCheckpointInMemory = true;
+                    LastStopEpoch = EpochCurrent;
+                    AddLogLine($"Stopped at epoch {EpochCurrent}");
+                    PumpUi(maxDrain: int.MaxValue, force: true);
+                    break;
+                case TrainingState.Error:
+                    StopElapsedTimer();
+                    StopUiPump();
+                    if (!string.IsNullOrWhiteSpace(message))
+                        AddLogLine($"Error: {message}");
+                    PumpUi(maxDrain: int.MaxValue, force: true);
+                    break;
+            }
+        });
     }
 
-    private void OnEpoch(TrainEpochResult r)
+    private void OnMetric(MetricPoint point)
     {
-        EpochCurrent = EpochStart + r.Epoch;
-        LastStopEpoch = EpochCurrent;
-        var elapsedMs = _stopwatch.ElapsedMilliseconds;
-        var snapshot = new TrainingMetricsSnapshot(
-            EpochCurrent,
-            r.TrainLoss,
-            r.ValLoss,
-            _lastAccuracy,
-            DateTimeOffset.UtcNow,
-            elapsedMs);
-
-        lock (_metricsLock)
-        {
-            _allSnapshots.Add(snapshot);
-        }
-
-        bool shouldDisplay = r.Epoch == 1 ||
-                             _updateUiEveryNEpochs <= 1 ||
-                             (r.Epoch % _updateUiEveryNEpochs == 0) ||
-                             r.Epoch == _runPlannedEpochs;
-        if (shouldDisplay)
-        {
-            _pendingUiChartUpdate = true;
-        }
-
-        QueueLogLine(r, shouldDisplay);
-        TryScheduleAccuracy(r.Epoch);
+        _metricQueue.Enqueue(point);
     }
 
     private void ResetProgress()
     {
         Epochs.Clear();
-        _trainLossValues.Clear();
-        _valLossValues.Clear();
-        Logs.Clear();
-        lock (_logLock)
-        {
-        }
-        LogText = string.Empty;
+        _trainLossPoints.Clear();
+        _valLossPoints.Clear();
+        _accPoints.Clear();
+        _logWindow.Clear();
+        LogLines.Clear();
         ElapsedText = "00:00:00";
         _lastAccuracy = null;
-        _fullLogs.Clear();
         _lastStopEpoch = 0;
         _stopReason = "";
         _epochCurrent = 0;
+        IsAutoScrollEnabled = true;
         HasCheckpointInMemory = false;
-        _lastUiLogIndex = 0;
-        _pendingUiLogFlush = false;
-        _pendingUiChartUpdate = false;
-        _forceFinalUiUpdate = false;
         _allSnapshots.Clear();
-        _lastUiChartIndex = 0;
+        _epochIndex.Clear();
+        _lastTrainEpoch = null;
+        _lastValEpoch = null;
+        _lastAccEpoch = null;
+        _chartCappedLogged = false;
         _runPlannedEpochs = 0;
+        while (_metricQueue.TryDequeue(out _)) { }
+        while (_logQueue.TryDequeue(out _)) { }
     }
 
-    private void AddLogLine(string line)
+    private void StartElapsedTimer()
     {
-        if (Logs.Count >= MaxLogLines)
-            Logs.RemoveAt(0);
-        Logs.Add(line);
+        _stopwatch.Restart();
+        _elapsedTimer?.Stop();
+        _elapsedTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
+        _elapsedTimer.Tick += (_, _) =>
+        {
+            var t = _stopwatch.Elapsed;
+            ElapsedText = $"{t:hh\\:mm\\:ss}";
+        };
+        _elapsedTimer.Start();
+    }
+
+    private void StopElapsedTimer()
+    {
+        _elapsedTimer?.Stop();
+        _elapsedTimer = null;
+    }
+
+    private void StartUiPump()
+    {
+        _uiPumpTimer?.Stop();
+        _uiPumpTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(UiPumpIntervalMs) };
+        _uiPumpTimer.Tick += (_, _) => PumpUi();
+        _uiPumpTimer.Start();
+    }
+
+    private void StopUiPump()
+    {
+        _uiPumpTimer?.Stop();
+        _uiPumpTimer = null;
+    }
+
+    private void PumpUi()
+    {
+        PumpUi(maxDrain: MaxDrainPerTick, force: false);
+    }
+
+    private void PumpUi(int maxDrain, bool force)
+    {
+        int drained = 0;
+        bool metricsUpdated = false;
+        while (force || drained < maxDrain)
+        {
+            if (!_logQueue.TryDequeue(out var logLine))
+                break;
+
+            drained++;
+            AppendLogLine(logLine);
+        }
+
+        drained = 0;
+        while (force || drained < maxDrain)
+        {
+            if (!_metricQueue.TryDequeue(out var point))
+                break;
+
+            drained++;
+            ApplyMetric(point);
+            metricsUpdated = true;
+        }
+
+        if (metricsUpdated && _allSnapshots.Count > 0 && State is TrainingState.Running or TrainingState.Stopping)
+            Status = $"Обучение: эпоха {_allSnapshots[^1].Epoch}";
+    }
+
+    private void EnqueueLog(string message)
+    {
+        if (string.IsNullOrWhiteSpace(message))
+            return;
+
+        if (message.Contains("train.start", StringComparison.OrdinalIgnoreCase) ||
+            message.Contains("train.completed", StringComparison.OrdinalIgnoreCase) ||
+            message.Contains("train.stopped", StringComparison.OrdinalIgnoreCase) ||
+            message.Contains("train.error", StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        _logQueue.Enqueue(CreateLogLine(message, epoch: 0));
     }
 
     public void SaveConfig(string? path = null)
@@ -759,11 +890,7 @@ public sealed class TrainingViewModel : ViewModelBase
 
             var sb = new StringBuilder();
             sb.AppendLine("epoch,train_loss,val_loss,accuracy,elapsed_ms");
-            List<TrainingMetricsSnapshot> exportSnapshots;
-            lock (_metricsLock)
-            {
-                exportSnapshots = _allSnapshots.ToList();
-            }
+            var exportSnapshots = _allSnapshots.ToList();
 
             foreach (var e in exportSnapshots)
             {
@@ -779,7 +906,7 @@ public sealed class TrainingViewModel : ViewModelBase
 
             if (exportJson)
             {
-                var jsonTarget = System.IO.Path.ChangeExtension(target, ".json");
+                var jsonTarget = Path.ChangeExtension(target, ".json");
                 EnsureDirectory(jsonTarget);
                 var json = JsonSerializer.Serialize(exportSnapshots, new JsonSerializerOptions { WriteIndented = true });
                 File.WriteAllText(jsonTarget, json);
@@ -807,6 +934,7 @@ public sealed class TrainingViewModel : ViewModelBase
             BatchSize = BatchSize,
             AccumulationSteps = AccumulationSteps,
             EpochDisplayEvery = EpochDisplayEvery,
+            UpdateUiEveryNEpochs = UpdateUiEveryNEpochs,
             Shuffle = Shuffle,
             DropLast = DropLast,
             LearningRate = LearningRate,
@@ -836,6 +964,7 @@ public sealed class TrainingViewModel : ViewModelBase
         BatchSize = cfg.BatchSize;
         AccumulationSteps = cfg.AccumulationSteps;
         EpochDisplayEvery = cfg.EpochDisplayEvery;
+        UpdateUiEveryNEpochs = cfg.UpdateUiEveryNEpochs;
         Shuffle = cfg.Shuffle;
         DropLast = cfg.DropLast;
         LearningRate = cfg.LearningRate;
@@ -851,7 +980,7 @@ public sealed class TrainingViewModel : ViewModelBase
         var name = string.IsNullOrWhiteSpace(ModelName) ? "model" : ModelName;
         var root = ModelPath.ModelsRoot;
         Directory.CreateDirectory(root);
-        return System.IO.Path.Combine(root, name);
+        return Path.Combine(root, name);
     }
 
     public string GetDefaultConfigPath() => GetDefaultBasePath() + "_config.json";
@@ -878,178 +1007,181 @@ public sealed class TrainingViewModel : ViewModelBase
             Directory.CreateDirectory(dir);
     }
 
-    private void StartElapsedTimer()
+    public void Dispose()
     {
-        _stopwatch.Restart();
-        _elapsedTimer?.Stop();
-        _elapsedTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(300) };
-        _elapsedTimer.Tick += (_, _) => UpdateElapsed();
-        _elapsedTimer.Start();
-        UpdateElapsed();
+        StopElapsedTimer();
+        StopUiPump();
     }
 
-    private void StopElapsedTimer()
+    private async Task<bool> EnsureConnectedAsync()
     {
-        _elapsedTimer?.Stop();
-        _elapsedTimer = null;
-        _stopwatch.Stop();
-        UpdateElapsed();
+        if (_connection.IsConnected)
+            return true;
+
+        await _connection.ConnectAsync(_connection.LastHost, _connection.LastPort);
+        return _connection.IsConnected;
     }
 
-    private void UpdateElapsed()
+    public void AddLogLine(string message)
     {
-        ElapsedText = _stopwatch.Elapsed.ToString(@"hh\:mm\:ss");
-    }
-
-    private void StartUiPump()
-    {
-        if (_uiPumpTimer != null)
-            _uiPumpTimer.Tick -= UiPumpTick;
-        _uiPumpTimer?.Stop();
-        _uiPumpTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(UiPumpIntervalMs) };
-        _uiPumpTimer.Tick += UiPumpTick;
-        _uiPumpTimer.Start();
-    }
-
-    private void StopUiPump()
-    {
-        if (_uiPumpTimer != null)
-        {
-            _uiPumpTimer.Stop();
-            _uiPumpTimer.Tick -= UiPumpTick;
-            _uiPumpTimer = null;
-        }
-    }
-
-    private void UiPumpTick(object? sender, EventArgs e) => PumpUi();
-
-    private void PumpUi()
-    {
-        TrainingMetricsSnapshot? latest = null;
-        List<TrainingMetricsSnapshot>? tail = null;
-
-        if (_pendingUiChartUpdate || _forceFinalUiUpdate)
-        {
-            lock (_metricsLock)
-            {
-                if (_allSnapshots.Count > 0)
-                {
-                    int start = Math.Max(0, _allSnapshots.Count - MaxChartPoints);
-                    tail = _allSnapshots.Skip(start).ToList();
-                    latest = _allSnapshots[^1];
-                    _lastUiChartIndex = _allSnapshots.Count;
-                }
-            }
-        }
-
-        if (tail != null && latest.HasValue)
-        {
-            _pendingUiChartUpdate = false;
-            _trainLossValues.Clear();
-            _valLossValues.Clear();
-            Epochs.Clear();
-
-            foreach (var s in tail)
-            {
-                _trainLossValues.Add(s.TrainLoss);
-                _valLossValues.Add(s.ValLoss);
-                Epochs.Add(new EpochViewModel
-                {
-                    Epoch = s.Epoch,
-                    TrainLoss = s.TrainLoss,
-                    ValLoss = s.ValLoss,
-                    Accuracy = s.Accuracy,
-                    ElapsedMs = s.ElapsedMs
-                });
-            }
-
-            var snapshot = latest.Value;
-            if (State is TrainingState.Running or TrainingState.Stopping)
-                Status = $"Обучение: эпоха {snapshot.Epoch}";
-        }
-
-        FlushLogs(force: _forceFinalUiUpdate);
-        if (_forceFinalUiUpdate) _forceFinalUiUpdate = false;
-    }
-
-    private void QueueLogLine(TrainEpochResult r, bool flushUi)
-    {
-        var accText = _lastAccuracy.HasValue ? _lastAccuracy.Value.ToString("F4") : "n/a";
-        var line = $"Epoch {EpochStart + r.Epoch}: Acc={accText}, TrainLoss={r.TrainLoss:F4}" + (r.ValLoss.HasValue ? $", ValLoss={r.ValLoss:F4}" : "");
-        lock (_logLock)
-        {
-            _fullLogs.Add(line);
-            if (flushUi) _pendingUiLogFlush = true;
-        }
-    }
-
-    private void FlushLogs(bool force)
-    {
-        List<string>? toAdd = null;
-        lock (_logLock)
-        {
-            if ((_pendingUiLogFlush || force) && _fullLogs.Count > _lastUiLogIndex)
-            {
-                toAdd = _fullLogs.Skip(_lastUiLogIndex).ToList();
-                _lastUiLogIndex = _fullLogs.Count;
-                _pendingUiLogFlush = false;
-            }
-        }
-
-        if (toAdd == null || toAdd.Count == 0)
+        if (string.IsNullOrWhiteSpace(message))
             return;
 
-        foreach (var line in toAdd)
+        _logQueue.Enqueue(CreateLogLine(message, epoch: 0));
+        if (_uiPumpTimer == null)
+            Dispatcher.UIThread.Post(() => PumpUi(maxDrain: int.MaxValue, force: true));
+    }
+
+    private void ApplyMetric(MetricPoint point)
+    {
+        if (point.Epoch <= 0)
+            return;
+
+        int lastEpoch = _epochStart + _runPlannedEpochs;
+        int uiEvery = Math.Max(1, UpdateUiEveryNEpochs);
+        bool shouldPlot = point.Epoch == 1 ||
+                          (lastEpoch > 0 && point.Epoch == lastEpoch) ||
+                          point.Epoch % uiEvery == 0;
+
+        var snapshot = new TrainingMetricsSnapshot(
+            point.Epoch,
+            point.Loss,
+            point.ValLoss,
+            point.Accuracy,
+            DateTimeOffset.Now,
+            point.ElapsedMs ?? 0);
+
+        if (!shouldPlot)
         {
-            AddLogLine(line);
+            if (point.Epoch > EpochCurrent)
+                EpochCurrent = point.Epoch;
+            return;
         }
 
-        LogText = string.Join(Environment.NewLine, Logs);
+        if (_epochIndex.TryGetValue(point.Epoch, out var existingIndex))
+        {
+            _allSnapshots[existingIndex] = snapshot;
+        }
+        else
+        {
+            if (_allSnapshots.Count == 0 || point.Epoch > _allSnapshots[^1].Epoch)
+            {
+                _allSnapshots.Add(snapshot);
+                _epochIndex[point.Epoch] = _allSnapshots.Count - 1;
+            }
+            else
+            {
+                int insertIndex = FindInsertIndex(point.Epoch);
+                _allSnapshots.Insert(insertIndex, snapshot);
+                for (int i = insertIndex; i < _allSnapshots.Count; i++)
+                    _epochIndex[_allSnapshots[i].Epoch] = i;
+            }
+        }
+
+        if (point.Accuracy.HasValue)
+            _lastAccuracy = point.Accuracy;
+
+        if (point.Epoch > EpochCurrent)
+            EpochCurrent = point.Epoch;
+
+        AddOrUpdatePoint(_trainLossPoints, point.Epoch, point.Loss, ref _lastTrainEpoch);
+        AddOrUpdatePoint(_valLossPoints, point.Epoch, point.ValLoss ?? double.NaN, ref _lastValEpoch);
+        if (point.Accuracy.HasValue)
+        {
+            AddOrUpdatePoint(_accPoints, point.Epoch, point.Accuracy.Value, ref _lastAccEpoch);
+            if (_accSeries != null && !_accSeries.IsVisible)
+                _accSeries.IsVisible = true;
+        }
+
+        TrimPoints(_trainLossPoints);
+        TrimPoints(_valLossPoints);
+        TrimPoints(_accPoints);
+
+        AppendLogLine(CreateLogLine(FormatMetricLogLine(snapshot), snapshot.Epoch));
     }
 
-    private void TryScheduleAccuracy(int epoch)
+    private int FindInsertIndex(int epoch)
     {
-        if (epoch % AccuracyEveryEpochs != 0)
+        int lo = 0;
+        int hi = _allSnapshots.Count - 1;
+        while (lo <= hi)
+        {
+            int mid = (lo + hi) / 2;
+            int midEpoch = _allSnapshots[mid].Epoch;
+            if (midEpoch == epoch)
+                return mid;
+            if (midEpoch < epoch)
+                lo = mid + 1;
+            else
+                hi = mid - 1;
+        }
+
+        return lo;
+    }
+
+    private void AddOrUpdatePoint(ObservableCollection<ObservablePoint> points, int epoch, double value, ref int? lastEpoch)
+    {
+        if (lastEpoch.HasValue && lastEpoch.Value == epoch && points.Count > 0)
+        {
+            var last = points[^1];
+            points[^1] = new ObservablePoint(last.X, value);
+            return;
+        }
+
+        if (lastEpoch.HasValue && epoch < lastEpoch.Value)
             return;
 
-        if (_accuracyTask is { IsCompleted: false })
-            return;
-
-        _accuracyCts?.Dispose();
-        _accuracyCts = new CancellationTokenSource();
-        var ct = _accuracyCts.Token;
-        _accuracyTask = Task.Run(() =>
-        {
-            try
-            {
-                return _host.ComputeAccuracy(ct);
-            }
-            catch (OperationCanceledException)
-            {
-                return null;
-            }
-        }, ct).ContinueWith(t =>
-        {
-            if (t.IsCompletedSuccessfully && !ct.IsCancellationRequested)
-            {
-                _lastAccuracy = t.Result;
-            }
-        }, TaskScheduler.Default);
+        points.Add(new ObservablePoint(epoch, value));
+        lastEpoch = epoch;
     }
 
-    private void CancelAccuracyComputation()
+    private void TrimPoints(ObservableCollection<ObservablePoint> points)
     {
-        _accuracyCts?.Cancel();
-        _accuracyCts?.Dispose();
-        _accuracyCts = null;
-        _accuracyTask = null;
-        _lastAccuracy = null;
+        bool trimmed = false;
+        while (points.Count > _maxChartPoints)
+        {
+            points.RemoveAt(0);
+            trimmed = true;
+        }
+
+        if (trimmed && !_chartCappedLogged)
+        {
+            _chartCappedLogged = true;
+            AddLogLine($"Chart points capped to MaxChartPoints={_maxChartPoints} (keep last N).");
+        }
     }
 
-    private static int ComputeUiUpdateInterval(int epochsPlanned)
+    private void AppendLogLine(LogLineVm logLine)
     {
-        if (epochsPlanned <= 200) return 1;
-        if (epochsPlanned <= 2000) return 10;
-        return 50;
+        _logWindow.Add(logLine);
+        LogLines.Add(logLine);
+
+        if (_logWindow.Count > _maxLogLines)
+        {
+            int remove = _logWindow.Count - _maxLogLines;
+            _logWindow.RemoveRange(0, remove);
+            for (int i = 0; i < remove && LogLines.Count > 0; i++)
+                LogLines.RemoveAt(0);
+        }
+    }
+
+    private static LogLineVm CreateLogLine(string message, int epoch)
+    {
+        var level = LogLevel.Info;
+        if (message.StartsWith("Error", StringComparison.OrdinalIgnoreCase))
+            level = LogLevel.Error;
+        else if (message.StartsWith("Warn", StringComparison.OrdinalIgnoreCase))
+            level = LogLevel.Warn;
+
+        return new LogLineVm(epoch, message.Trim(), DateTimeOffset.Now, level);
+    }
+
+    private static string FormatMetricLogLine(TrainingMetricsSnapshot snapshot)
+    {
+        var culture = CultureInfo.CurrentCulture;
+        string accText = snapshot.Accuracy.HasValue ? snapshot.Accuracy.Value.ToString("0.0000", culture) : "n/a";
+        string trainText = snapshot.TrainLoss.ToString("0.0000", culture);
+        string valText = snapshot.ValLoss.HasValue ? snapshot.ValLoss.Value.ToString("0.0000", culture) : "n/a";
+        return $"Epoch {snapshot.Epoch}: Acc={accText}, TrainLoss={trainText}, ValLoss={valText}";
     }
 }

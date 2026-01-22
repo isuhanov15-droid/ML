@@ -1,0 +1,24 @@
+{
+  "name": "Xor",
+  "projectType": "mlp",
+  "files": [
+    {
+      "path": "metrics.csv",
+      "kind": "Other"
+    },
+    {
+      "path": "network.json",
+      "kind": "Network"
+    },
+    {
+      "path": "params.json",
+      "kind": "Params"
+    },
+    {
+      "path": "Xor.mlproj",
+      "kind": "Other"
+    }
+  ],
+  "createdUtc": "2026-01-18T12:00:00Z",
+  "updatedUtc": "2026-01-22T16:48:26.8497055Z"
+}
