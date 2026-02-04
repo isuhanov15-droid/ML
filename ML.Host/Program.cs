@@ -28,10 +28,12 @@ internal static class Program
         var runs = new RunStore(AppContext.BaseDirectory);
         var training = new TrainingService();
         var inference = new InferenceService();
+        var brainMl = new BrainMlService();
         var hostHandlers = new HostHandlers();
         var trainHandlers = new TrainHandlers(training, rpcServer.Events, experiments, runs, inference);
         var projectHandlers = new ProjectHandlers(projects, experiments, runs);
         var inferHandlers = new InferenceHandlers(inference, projects, rpcServer.Events);
+        var brainMlHandlers = new BrainMlHandlers(brainMl);
 
         router.Register("host.info", _ => hostHandlers.GetInfoAsync());
         router.Register("host.capabilities", _ => hostHandlers.GetCapabilitiesAsync());
@@ -55,6 +57,11 @@ internal static class Program
         router.Register("infer.single", inferHandlers.InferSingleAsync);
         router.Register("infer.batch", inferHandlers.InferBatchAsync);
         router.Register("eval.dataset", inferHandlers.EvalDatasetAsync);
+        router.Register("ml.ping", brainMlHandlers.PingAsync);
+        router.Register("ml.infer", brainMlHandlers.InferAsync);
+        router.Register("ml.train", brainMlHandlers.TrainAsync);
+        router.Register("ml.checkpoint.save", brainMlHandlers.SaveAsync);
+        router.Register("ml.checkpoint.load", brainMlHandlers.LoadAsync);
 
         rpcServer.Start();
 
