@@ -1,15 +1,22 @@
 namespace ML.Shared.Protocol;
 
 public sealed record MlInferRequest(
-    float[] State,
-    float[]? ActionMask,
-    int InputDim,
-    int ActionCount
+    string? ModelId,
+    float[]? Observation,
+    float[]? State,
+    bool[]? ActionMask,
+    float[]? ActionMaskF,
+    int? TopK,
+    int? Seed,
+    int? InputDim,
+    int? ActionCount
 );
 
 public sealed record MlInferResponse(
-    int ActionIndex,
+    bool Ok,
     double[] QValues,
+    int ActionIndex,
+    string? Reason,
     float[]? Probabilities,
     double Entropy,
     double AvgQ
@@ -21,7 +28,8 @@ public sealed record MlTransitionDto(
     float Reward,
     float[] NextState,
     bool Done,
-    float[]? NextActionMask
+    bool[]? ActionMask,
+    bool[]? ActionMask2
 );
 
 public sealed record MlTrainConfigDto(
@@ -36,21 +44,42 @@ public sealed record MlTrainConfigDto(
 );
 
 public sealed record MlTrainRequest(
+    long EpisodeId,
     long Tick,
-    MlTransitionDto Transition,
-    MlTrainConfigDto Config,
-    int InputDim,
-    int ActionCount
+    float[]? S,
+    int? A,
+    float? R,
+    float[]? S2,
+    bool? Done,
+    bool[]? ActionMask,
+    bool[]? ActionMask2,
+    float? Gamma,
+    MlTransitionDto? Transition,
+    MlTrainConfigDto? Config,
+    int? InputDim,
+    int? ActionCount
 );
 
 public sealed record MlTrainResponse(
-    bool Trained,
+    bool Ok,
     double Loss,
-    double GradNorm,
+    double AvgQ,
     long TrainSteps,
-    int BufferSize
+    double Epsilon,
+    long InvalidActions,
+    string? Reason
 );
 
 public sealed record MlCheckpointRequest(string Path);
 
 public sealed record MlCheckpointResponse(bool Ok, string? Meta);
+
+public sealed record MlStatusRequest();
+
+public sealed record MlStatusResponse(
+    bool Ok,
+    string[] Methods,
+    string Version,
+    bool HasCore,
+    string? LastError
+);

@@ -7,10 +7,12 @@ namespace ML.Host.Rpc.Handlers;
 public sealed class BrainMlHandlers
 {
     private readonly BrainMlService _service;
+    private readonly Func<string[]> _methodsProvider;
 
-    public BrainMlHandlers(BrainMlService service)
+    public BrainMlHandlers(BrainMlService service, Func<string[]> methodsProvider)
     {
         _service = service;
+        _methodsProvider = methodsProvider;
     }
 
     public Task<object?> InferAsync(RpcRequest req)
@@ -44,6 +46,19 @@ public sealed class BrainMlHandlers
     public Task<object?> PingAsync(RpcRequest req)
     {
         return Task.FromResult<object?>(new { status = "ok" });
+    }
+
+    public Task<object?> StatusAsync(RpcRequest req)
+    {
+        var methods = _methodsProvider();
+        var response = new MlStatusResponse(
+            Ok: true,
+            Methods: methods,
+            Version: "mlbridge/1",
+            HasCore: true,
+            LastError: _service.LastError
+        );
+        return Task.FromResult<object?>(response);
     }
 
     private static T Deserialize<T>(RpcRequest req)

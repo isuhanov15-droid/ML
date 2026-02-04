@@ -1,5 +1,0 @@
-{
-  "epochs": 50,
-  "learningRate": 0.05,
-  "batchSize": 8
-}

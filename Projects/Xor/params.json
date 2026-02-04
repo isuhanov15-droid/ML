@@ -1,6 +1,0 @@
-{
-  "epochs": 10000,
-  "learningRate": 0.01,
-  "batchSize": 64,
-  "optimizer": "adam"
-}

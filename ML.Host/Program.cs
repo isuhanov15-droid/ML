@@ -33,7 +33,7 @@ internal static class Program
         var trainHandlers = new TrainHandlers(training, rpcServer.Events, experiments, runs, inference);
         var projectHandlers = new ProjectHandlers(projects, experiments, runs);
         var inferHandlers = new InferenceHandlers(inference, projects, rpcServer.Events);
-        var brainMlHandlers = new BrainMlHandlers(brainMl);
+        var brainMlHandlers = new BrainMlHandlers(brainMl, () => router.Methods);
 
         router.Register("host.info", _ => hostHandlers.GetInfoAsync());
         router.Register("host.capabilities", _ => hostHandlers.GetCapabilitiesAsync());
@@ -58,6 +58,7 @@ internal static class Program
         router.Register("infer.batch", inferHandlers.InferBatchAsync);
         router.Register("eval.dataset", inferHandlers.EvalDatasetAsync);
         router.Register("ml.ping", brainMlHandlers.PingAsync);
+        router.Register("ml.status", brainMlHandlers.StatusAsync);
         router.Register("ml.infer", brainMlHandlers.InferAsync);
         router.Register("ml.train", brainMlHandlers.TrainAsync);
         router.Register("ml.checkpoint.save", brainMlHandlers.SaveAsync);
@@ -67,6 +68,7 @@ internal static class Program
 
         Console.WriteLine($"ML.Host listening on 0.0.0.0:{port}");
         Console.WriteLine($"ML.Host RPC listening on 0.0.0.0:{rpcPort}");
+        Console.WriteLine($"RPC methods: {string.Join(", ", router.Methods)}");
         Console.WriteLine("Press Ctrl+C to stop.");
 
         using var cts = new CancellationTokenSource();

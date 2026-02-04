@@ -1,4 +1,4 @@
-<Window xmlns="https://github.com/avaloniaui"
+﻿<Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:controls="clr-namespace:ML.Studio.Controls"
         x:Class="ML.Studio.Views.MainWindow"
@@ -370,13 +370,13 @@
 
       <GridSplitter Grid.Column="3" Width="6" />
 
-      <Border Classes="panel" Grid.Column="4" Grid.RowSpan="3">
+            <Border Classes="panel" Grid.Column="4" Grid.RowSpan="3">
         <DockPanel>
           <Border Classes="panel-header" DockPanel.Dock="Top" Padding="8">
             <TextBlock Text="Метрики" />
           </Border>
-          <ScrollViewer VerticalScrollBarVisibility="Auto">
-            <StackPanel Spacing="8" Margin="8">
+          <DockPanel Margin="8">
+            <StackPanel DockPanel.Dock="Top" Spacing="8">
               <StackPanel Orientation="Horizontal" Spacing="8">
                 <TextBlock Text="Метрики обучения" FontWeight="SemiBold" />
                 <CheckBox Content="Следовать за последним" IsChecked="{Binding FollowMetrics}" />
@@ -391,49 +391,55 @@
                 <TextBlock Grid.Column="2" Text="ValLoss" FontWeight="SemiBold" />
                 <TextBlock Grid.Column="3" Text="Acc" FontWeight="SemiBold" />
               </Grid>
-              <ListBox x:Name="MetricsList" ItemsSource="{Binding Metrics}">
-                <ListBox.ItemTemplate>
-                  <DataTemplate>
-                    <Grid ColumnDefinitions="60,*,*,*">
-                      <TextBlock Text="{Binding Epoch}" />
-                      <TextBlock Grid.Column="1" Text="{Binding TrainLossDisplay}" />
-                      <TextBlock Grid.Column="2" Text="{Binding ValLossDisplay}" />
-                      <TextBlock Grid.Column="3" Text="{Binding AccDisplay}" />
-                    </Grid>
-                  </DataTemplate>
-                </ListBox.ItemTemplate>
-                <ListBox.Styles>
-                  <Style Selector="ListBoxItem">
-                    <Setter Property="Margin" Value="0" />
-                    <Setter Property="Padding" Value="0" />
-                  </Style>
-                </ListBox.Styles>
-              </ListBox>
-              <TextBlock Text="Сравнение запусков" FontWeight="SemiBold" />
-              <Border Classes="panel" Padding="8">
+            </StackPanel>
+            <Border DockPanel.Dock="Bottom" Classes="panel" Padding="8" Margin="0,8,0,0" MinHeight="150">
+              <StackPanel Spacing="6">
+                <TextBlock Text="Сравнение запусков" FontWeight="SemiBold" />
                 <StackPanel Spacing="6">
                   <StackPanel Orientation="Horizontal" Spacing="6">
                     <TextBlock Text="Run A" VerticalAlignment="Center" />
-                    <ComboBox Width="140" ItemsSource="{Binding RunIds}" SelectedItem="{Binding SelectedRunA}" />
+                    <ComboBox Width="110" ItemsSource="{Binding RunIds}" SelectedItem="{Binding SelectedRunA}" />
+                  </StackPanel>
+                  <StackPanel Orientation="Horizontal" Spacing="6">
                     <TextBlock Text="Run B" VerticalAlignment="Center" />
-                    <ComboBox Width="140" ItemsSource="{Binding RunIds}" SelectedItem="{Binding SelectedRunB}" />
-                  </StackPanel>
-                  <StackPanel Orientation="Horizontal" Spacing="8">
-                    <CheckBox Content="TrainLoss" IsChecked="{Binding CompareShowTrain}" />
-                    <CheckBox Content="ValLoss" IsChecked="{Binding CompareShowVal}" />
-                    <CheckBox Content="Accuracy" IsChecked="{Binding CompareShowAcc}" />
-                  </StackPanel>
-                  <StackPanel Orientation="Horizontal" Spacing="8">
-                    <Button Content="Compare" Click="OnCompareRuns" />
-                    <Button Content="Clear" Click="OnClearCompare" />
+                    <ComboBox Width="110" ItemsSource="{Binding RunIds}" SelectedItem="{Binding SelectedRunB}" />
                   </StackPanel>
                 </StackPanel>
-              </Border>
-            </StackPanel>
-          </ScrollViewer>
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                  <CheckBox Content="TrainLoss" IsChecked="{Binding CompareShowTrain}" />
+                  <CheckBox Content="ValLoss" IsChecked="{Binding CompareShowVal}" />
+                  <CheckBox Content="Accuracy" IsChecked="{Binding CompareShowAcc}" />
+                </StackPanel>
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                  <Button Content="Compare" Click="OnCompareRuns" />
+                  <Button Content="Clear" Click="OnClearCompare" />
+                </StackPanel>
+              </StackPanel>
+            </Border>
+            <ListBox x:Name="MetricsList"
+                     ItemsSource="{Binding Metrics}"
+                     ScrollViewer.VerticalScrollBarVisibility="Auto"
+                     ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+              <ListBox.ItemTemplate>
+                <DataTemplate>
+                  <Grid ColumnDefinitions="60,*,*,*">
+                    <TextBlock Text="{Binding Epoch}" />
+                    <TextBlock Grid.Column="1" Text="{Binding TrainLossDisplay}" />
+                    <TextBlock Grid.Column="2" Text="{Binding ValLossDisplay}" />
+                    <TextBlock Grid.Column="3" Text="{Binding AccDisplay}" />
+                  </Grid>
+                </DataTemplate>
+              </ListBox.ItemTemplate>
+              <ListBox.Styles>
+                <Style Selector="ListBoxItem">
+                  <Setter Property="Margin" Value="0" />
+                  <Setter Property="Padding" Value="0" />
+                </Style>
+              </ListBox.Styles>
+            </ListBox>
+          </DockPanel>
         </DockPanel>
       </Border>
-
       <GridSplitter Grid.Row="1" Grid.Column="2" Height="6" />
 
       <Border Classes="panel" Grid.Row="2" Grid.Column="2">
@@ -462,3 +468,6 @@
     </Grid>
   </DockPanel>
 </Window>
+
+
+

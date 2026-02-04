@@ -772,12 +772,13 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
         try
         {
-            var rel = GetRelative(SelectedNode.FullPath);
+            var selectedFullPath = SelectedNode.FullPath;
+            var rel = GetRelative(selectedFullPath);
             await _files.DeleteFileAsync(_currentProject, rel);
             _currentProject = await _workspace.OpenProjectAsync(_workspace.GetProjectFilePath(_currentProject));
             BuildProjectTree(_currentProject);
             RaiseComputedState();
-            CloseTabByPath(SelectedNode.FullPath);
+            CloseTabByPath(selectedFullPath);
             _logger.Append("info", $"Файл удален: {rel}");
             return new DeleteResult(true, IsRequiredFile(rel), rel);
         }

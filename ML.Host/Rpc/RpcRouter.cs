@@ -8,6 +8,8 @@ public sealed class RpcRouter
 {
     private readonly Dictionary<string, Func<RpcRequest, Task<object?>>> _handlers = new(StringComparer.OrdinalIgnoreCase);
 
+    public string[] Methods => _handlers.Keys.OrderBy(x => x, StringComparer.OrdinalIgnoreCase).ToArray();
+
     public void Register(string method, Func<RpcRequest, Task<object?>> handler)
     {
         _handlers[method] = handler;
@@ -20,7 +22,7 @@ public sealed class RpcRouter
             if (!_handlers.TryGetValue(req.method, out var handler))
             {
                 await conn.SendResponseAsync(new RpcResponse(req.v, req.id, false, null,
-                    new RpcError("rpc.method_not_found", $"Unknown method: {req.method}", null)));
+                    new RpcError("rpc.method_not_found", $"Unknown method: {req.method}. Try ml.status", null)));
                 return;
             }
 

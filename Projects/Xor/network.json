@@ -1,7 +1,0 @@
-{
-  "inputSize": 2,
-  "outputSize": 2,
-  "hidden": [4, 4],
-  "activation": "ReLuS",
-  "seed": 123
-}

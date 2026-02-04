@@ -1,0 +1,6 @@
+{
+  "epochs": 200,
+  "learningRate": 0.003,
+  "batchSize": 4096,
+  "optimizer": "adam"
+}

@@ -1,0 +1,7 @@
+﻿{
+  "inputSize": 2,
+  "outputSize": 3,
+  "hidden": [256, 256, 128, 64],
+  "activation": "ReLu",
+  "seed": 1337
+}

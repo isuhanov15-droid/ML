@@ -1,0 +1,32 @@
+{
+  "name": "StressSpiral",
+  "projectType": "mlp",
+  "files": [
+    {
+      "path": "Crash-test ML-Studio it\u0027s very beautyfull hetmap.PNG",
+      "kind": "Other"
+    },
+    {
+      "path": "dataset.csv",
+      "kind": "Dataset"
+    },
+    {
+      "path": "model.json",
+      "kind": "Model"
+    },
+    {
+      "path": "network.json",
+      "kind": "Network"
+    },
+    {
+      "path": "params.json",
+      "kind": "Params"
+    },
+    {
+      "path": "StressSpiral.mlproj",
+      "kind": "Other"
+    }
+  ],
+  "createdUtc": "2026-01-27T20:50:00Z",
+  "updatedUtc": "2026-02-04T14:28:04.1037048Z"
+}
