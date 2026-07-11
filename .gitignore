@@ -17,3 +17,5 @@ Thumbs.db
 # Local dotnet cache (used in this repo to avoid home permission issues)
 /.dotnet/
 /.nuget/
+
+/checkpoints/

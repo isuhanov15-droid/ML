@@ -177,7 +177,9 @@ public sealed class BrainMlService
                 try
                 {
                     var json = File.ReadAllText(req.Path);
-                    var meta = System.Text.Json.JsonSerializer.Deserialize<CheckpointMeta>(json);
+                    var meta = System.Text.Json.JsonSerializer.Deserialize<CheckpointMeta>(
+                        json,
+                        new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true });
                     if (meta is not null && !string.IsNullOrWhiteSpace(meta.WeightsPath) && File.Exists(meta.WeightsPath))
                     {
                         _net = ML.Core.Serialization.ModelStore.LoadFromFile(meta.WeightsPath);
@@ -205,6 +207,18 @@ public sealed class BrainMlService
 
     private void EnsureModel(int inputDim, int actionCount, int seed, double lr)
     {
+        // Checkpoints created before v1.1 did not store dimensions.  Bind the
+        // restored network to the dimensions of its first request instead of
+        // rebuilding it and silently discarding the restored weights.
+        if (_net != null && _inputDim <= 0 && _actionCount <= 0)
+        {
+            _inputDim = inputDim;
+            _actionCount = actionCount;
+            _seed = seed;
+            _lr = lr;
+            return;
+        }
+
         if (_net != null && _inputDim == inputDim && _actionCount == actionCount)
             return;
         _inputDim = inputDim;
