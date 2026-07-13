@@ -67,7 +67,10 @@ public sealed record MlTrainResponse(
     long TrainSteps,
     double Epsilon,
     long InvalidActions,
-    string? Reason
+    string? Reason,
+    bool Trained = false,
+    double GradNorm = 0,
+    int BufferSize = 0
 );
 
 public sealed record MlCheckpointRequest(string Path);

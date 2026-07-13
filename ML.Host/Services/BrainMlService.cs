@@ -82,7 +82,7 @@ public sealed class BrainMlService
                 var done = req.Done ?? req.Transition?.Done;
                 var mask2 = req.ActionMask2 ?? req.Transition?.ActionMask2;
                 if (state == null || nextState == null || action == null || reward == null || done == null)
-                    return new MlTrainResponse(false, 0, 0, _trainSteps, 0, 0, "transition missing");
+                    return BuildTrainResponse(false, false, 0, 0, "transition missing");
 
                 var inputDim = req.InputDim ?? state.Length;
                 var actionCount = req.ActionCount ?? _actionCount;
@@ -103,9 +103,9 @@ public sealed class BrainMlService
                 _buffer.Add(transition);
 
                 if (cfg.TrainEveryTicks <= 0 || req.Tick % cfg.TrainEveryTicks != 0)
-                    return new MlTrainResponse(true, 0, 0, _trainSteps, 0, 0, null);
+                    return BuildTrainResponse(true, false, _lastLoss, 0, null);
                 if (_buffer.Count < cfg.BatchSize || cfg.BatchSize <= 0)
-                    return new MlTrainResponse(true, 0, 0, _trainSteps, 0, 0, null);
+                    return BuildTrainResponse(true, false, _lastLoss, 0, null);
 
                 var steps = Math.Max(1, cfg.TrainStepsPerBatch);
                 var lossSum = 0.0;
@@ -118,7 +118,7 @@ public sealed class BrainMlService
                     if (batch.Count == 0) break;
                     var loss = TrainBatch(batch, cfg.Gamma, cfg.GradClip, out gradNorm);
                     if (double.IsNaN(loss) || double.IsInfinity(loss))
-                        return new MlTrainResponse(false, double.NaN, 0, _trainSteps, 0, 0, "nan");
+                        return BuildTrainResponse(false, false, double.NaN, gradNorm, "nan");
                     lossSum += loss;
                     _trainSteps++;
                     didTrain = true;
@@ -129,14 +129,35 @@ public sealed class BrainMlService
                 if (didTrain)
                     _lastLoss = lossSum / steps;
 
-                return new MlTrainResponse(true, _lastLoss, 0, _trainSteps, 0, 0, null);
+                return BuildTrainResponse(true, didTrain, _lastLoss, gradNorm, null);
             }
         }
         catch (Exception ex)
         {
             _lastError = ex.Message;
-            return new MlTrainResponse(false, double.NaN, 0, _trainSteps, 0, 0, ex.Message);
+            return BuildTrainResponse(false, false, double.NaN, 0, ex.Message);
         }
+    }
+
+    private MlTrainResponse BuildTrainResponse(
+        bool ok,
+        bool trained,
+        double loss,
+        double gradNorm,
+        string? reason)
+    {
+        return new MlTrainResponse(
+            Ok: ok,
+            Loss: loss,
+            AvgQ: 0,
+            TrainSteps: _trainSteps,
+            Epsilon: 0,
+            InvalidActions: 0,
+            Reason: reason,
+            Trained: trained,
+            GradNorm: gradNorm,
+            BufferSize: _buffer.Count
+        );
     }
 
     public MlCheckpointResponse Save(MlCheckpointRequest req)
