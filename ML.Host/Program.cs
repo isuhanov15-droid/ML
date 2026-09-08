@@ -63,6 +63,7 @@ internal static class Program
         router.Register("ml.train", brainMlHandlers.TrainAsync);
         router.Register("ml.checkpoint.save", brainMlHandlers.SaveAsync);
         router.Register("ml.checkpoint.load", brainMlHandlers.LoadAsync);
+        router.Register("ml.reset", brainMlHandlers.ResetAsync);
 
         rpcServer.Start();
 

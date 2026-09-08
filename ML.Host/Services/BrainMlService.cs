@@ -9,6 +9,7 @@ namespace ML.Host.Services;
 public sealed class BrainMlService
 {
     private readonly object _lock = new();
+    private readonly string _instanceId = Guid.NewGuid().ToString("N");
     private Network? _net;
     private Network? _targetNet;
     private AdamOptimizer? _optimizer;
@@ -24,6 +25,21 @@ public sealed class BrainMlService
     private string? _lastError;
 
     public string? LastError => _lastError;
+    public string InstanceId => _instanceId;
+
+    public MlCheckpointResponse Reset(MlResetRequest req)
+    {
+        lock (_lock)
+        {
+            if (!double.IsFinite(req.LearningRate) || req.LearningRate <= 0)
+                return new MlCheckpointResponse(false, "invalid learning rate");
+            _net = null; _targetNet = null; _optimizer = null;
+            _inputDim = 0; _actionCount = 0; _trainSteps = 0; _lastLoss = 0;
+            _seed = req.Seed; _lr = req.LearningRate; _rng = new Random(req.Seed);
+            _buffer = new ExperienceBuffer(1024); _lastError = null;
+            return new MlCheckpointResponse(true, "reset");
+        }
+    }
 
     public MlInferResponse Infer(MlInferRequest req)
     {
@@ -40,14 +56,21 @@ public sealed class BrainMlService
                 if (actionCount <= 0)
                     actionCount = _actionCount == 0 ? 8 : _actionCount;
 
-                EnsureModel(inputDim, actionCount, seed: _seed == 0 ? 1337 : _seed, lr: _lr == 0 ? 0.0005 : _lr);
+                var seed = req.Seed ?? (_seed == 0 ? 1337 : _seed);
+                var rate = req.LearningRate ?? (_lr == 0 ? 0.0005 : _lr);
+                if (!double.IsFinite(rate) || rate <= 0)
+                    return new MlInferResponse(false, Array.Empty<double>(), 0, "invalid learning rate", null, 0, 0);
+                if (state.Length != inputDim || state.Any(v => !float.IsFinite(v)))
+                    throw new InvalidDataException("invalid observation");
+                EnsureModel(inputDim, actionCount, seed, rate);
                 var q = PredictQ(state);
-                var probs = Softmax(q);
+                var mask = req.ActionMaskF ?? ToFloatMask(req.ActionMask);
+                var probs = Softmax(q, mask);
                 var entropy = Entropy(probs);
                 var avgQ = q.Length == 0 ? 0 : q.Average();
-                var mask = req.ActionMaskF ?? ToFloatMask(req.ActionMask);
                 var actionIdx = ArgMaxWithMask(q, mask);
-                return new MlInferResponse(true, q, actionIdx, null, probs.Select(v => (float)v).ToArray(), entropy, avgQ);
+                _lastError = null;
+                return new MlInferResponse(true, q, actionIdx, null, probs.Select(v => (float)v).ToArray(), entropy, avgQ) { ServerInstance = _instanceId };
             }
         }
         catch (Exception ex)
@@ -63,6 +86,8 @@ public sealed class BrainMlService
         {
             lock (_lock)
             {
+                if (req.ExpectedInstanceId is not null && req.ExpectedInstanceId != _instanceId)
+                    return BuildTrainResponse(false, false, _lastLoss, 0, "ML.Host instance changed");
                 var cfg = req.Config ?? new MlTrainConfigDto(
                     BufferSize: 1024,
                     BatchSize: 256,
@@ -73,14 +98,13 @@ public sealed class BrainMlService
                     GradClip: 1.0,
                     Seed: req.Config?.Seed ?? 1337
                 );
-                _seed = cfg.Seed;
                 _lr = _lr == 0 ? 0.0005 : _lr;
                 var state = req.S ?? req.Transition?.State;
                 var nextState = req.S2 ?? req.Transition?.NextState;
                 var action = req.A ?? req.Transition?.ActionIndex;
                 var reward = req.R ?? req.Transition?.Reward;
                 var done = req.Done ?? req.Transition?.Done;
-                var mask2 = req.ActionMask2 ?? req.Transition?.ActionMask2;
+                var mask2 = req.ActionMask2 ?? req.Transition?.NextActionMask ?? req.Transition?.ActionMask2;
                 if (state == null || nextState == null || action == null || reward == null || done == null)
                     return BuildTrainResponse(false, false, 0, 0, "transition missing");
 
@@ -89,7 +113,14 @@ public sealed class BrainMlService
                 if (actionCount <= 0)
                     actionCount = _actionCount == 0 ? 8 : _actionCount;
 
-                EnsureModel(inputDim, actionCount, _seed, _lr);
+                if (state.Length != inputDim || nextState.Length != inputDim ||
+                    state.Any(v => !float.IsFinite(v)) || nextState.Any(v => !float.IsFinite(v)) ||
+                    !double.IsFinite(reward.Value) || action.Value < 0 || action.Value >= actionCount ||
+                    (mask2 != null && mask2.Length != actionCount) ||
+                    !double.IsFinite(cfg.Gamma) || cfg.Gamma < 0 || cfg.Gamma > 1 ||
+                    !double.IsFinite(cfg.GradClip) || cfg.GradClip < 0)
+                    return BuildTrainResponse(false, false, _lastLoss, 0, "invalid transition or training config");
+                EnsureModel(inputDim, actionCount, cfg.Seed, _lr);
                 EnsureBuffer(cfg.BufferSize);
 
                 var transition = new Transition(
@@ -107,7 +138,8 @@ public sealed class BrainMlService
                 if (_buffer.Count < cfg.BatchSize || cfg.BatchSize <= 0)
                     return BuildTrainResponse(true, false, _lastLoss, 0, null);
 
-                var steps = Math.Max(1, cfg.TrainStepsPerBatch);
+                if (cfg.TrainStepsPerBatch <= 0) return BuildTrainResponse(true, false, _lastLoss, 0, null);
+                var steps = cfg.TrainStepsPerBatch;
                 var lossSum = 0.0;
                 var gradNorm = 0.0;
                 var didTrain = false;
@@ -146,6 +178,7 @@ public sealed class BrainMlService
         double gradNorm,
         string? reason)
     {
+        _lastError = ok ? null : reason;
         return new MlTrainResponse(
             Ok: ok,
             Loss: loss,
@@ -166,17 +199,33 @@ public sealed class BrainMlService
         {
             lock (_lock)
             {
+                if (req.ExpectedInstanceId is not null && req.ExpectedInstanceId != _instanceId)
+                    return new MlCheckpointResponse(false, "ML.Host instance changed");
                 if (string.IsNullOrWhiteSpace(req.Path))
                     return new MlCheckpointResponse(false, "path empty");
                 var dir = Path.GetDirectoryName(req.Path);
                 if (!string.IsNullOrWhiteSpace(dir))
                     Directory.CreateDirectory(dir);
-                var weightsPath = req.Path + ".net";
-                if (_net != null)
-                    ML.Core.Serialization.ModelStore.SaveToFile(weightsPath, _net);
-                var meta = new { trainSteps = _trainSteps, weightsPath };
+                if (_net is null) return new MlCheckpointResponse(false, "model not initialized");
+                // Commit metadata only after a complete immutable generation exists.
+                var weightsPath = Path.GetFullPath(req.Path + ".weights-" + Guid.NewGuid().ToString("N") + ".net");
+                string? previousWeights = null;
+                if (File.Exists(req.Path))
+                {
+                    try { previousWeights = System.Text.Json.JsonSerializer.Deserialize<CheckpointMeta>(File.ReadAllText(req.Path),
+                        new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true })?.WeightsPath; }
+                    catch { /* Preserve an unreadable old generation for diagnosis. */ }
+                }
+                ML.Core.Serialization.ModelStore.SaveToFile(weightsPath, _net);
+                using (var file = new FileStream(weightsPath, FileMode.Open, FileAccess.ReadWrite)) file.Flush(true);
+                var meta = new { trainSteps = _trainSteps, weightsPath, inputDim = _inputDim, actionCount = _actionCount, seed = _seed, learningRate = _lr, resumeMode = "weights-only" };
                 var json = System.Text.Json.JsonSerializer.Serialize(meta);
-                File.WriteAllText(req.Path, json);
+                File.WriteAllText(req.Path + ".tmp", json);
+                using (var file = new FileStream(req.Path + ".tmp", FileMode.Open, FileAccess.ReadWrite)) file.Flush(true);
+                File.Move(req.Path + ".tmp", req.Path, true);
+                if (previousWeights is not null &&
+                    previousWeights.StartsWith(Path.GetFullPath(req.Path) + ".weights-", StringComparison.Ordinal))
+                { try { File.Delete(previousWeights); } catch { } }
                 return new MlCheckpointResponse(true, json);
             }
         }
@@ -203,8 +252,17 @@ public sealed class BrainMlService
                         new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true });
                     if (meta is not null && !string.IsNullOrWhiteSpace(meta.WeightsPath) && File.Exists(meta.WeightsPath))
                     {
-                        _net = ML.Core.Serialization.ModelStore.LoadFromFile(meta.WeightsPath);
-                        _targetNet = ML.Core.Serialization.ModelStore.LoadFromFile(meta.WeightsPath);
+                        var loaded = ML.Core.Serialization.ModelStore.LoadFromFile(meta.WeightsPath);
+                        var target = ML.Core.Serialization.ModelStore.LoadFromFile(meta.WeightsPath);
+                        _net = loaded;
+                        _targetNet = target;
+                        _inputDim = loaded.Layers.OfType<LinearLayer>().First().InputSize;
+                        _actionCount = loaded.Layers.OfType<LinearLayer>().Last().OutputSize;
+                        _seed = meta.Seed;
+                        _lr = meta.LearningRate > 0 ? meta.LearningRate : 0.0005;
+                        _buffer = new ExperienceBuffer(1024);
+                        _lastLoss = 0;
+                        _lastError = null;
                         _optimizer = new AdamOptimizer(_lr == 0 ? 0.0005 : _lr);
                         _trainSteps = meta.TrainSteps;
                         return new MlCheckpointResponse(true, json);
@@ -241,7 +299,12 @@ public sealed class BrainMlService
         }
 
         if (_net != null && _inputDim == inputDim && _actionCount == actionCount)
+        {
+            if (_lr != lr) { _lr = lr; _optimizer = new AdamOptimizer(lr); }
             return;
+        }
+        if (_net is not null) throw new InvalidOperationException("model dimensions changed; explicit new model required");
+        _rng = new Random(seed);
         _inputDim = inputDim;
         _actionCount = actionCount;
         _seed = seed;
@@ -265,7 +328,7 @@ public sealed class BrainMlService
         var input = ToDouble(state);
         var q = _net.Forward(input, training: false);
         if (q.Any(v => double.IsNaN(v) || double.IsInfinity(v)))
-            return new double[_actionCount];
+            throw new InvalidDataException("non-finite Q values");
         return q;
     }
 
@@ -314,15 +377,19 @@ public sealed class BrainMlService
         return arr;
     }
 
-    private static double[] Softmax(double[] logits)
+    private static double[] Softmax(double[] logits, float[]? mask = null)
     {
         if (logits.Length == 0) return Array.Empty<double>();
-        var max = logits.Max();
+        var useMask = mask is not null && mask.Length == logits.Length;
+        var max = double.NegativeInfinity;
+        for (var i = 0; i < logits.Length; i++)
+            if (!useMask || mask![i] > 0f) max = Math.Max(max, logits[i]);
+        if (double.IsNegativeInfinity(max)) return new double[logits.Length];
         var exps = new double[logits.Length];
         double sum = 0;
         for (var i = 0; i < logits.Length; i++)
         {
-            var e = Math.Exp(logits[i] - max);
+            var e = useMask && mask![i] <= 0f ? 0.0 : Math.Exp(logits[i] - max);
             exps[i] = e;
             sum += e;
         }
@@ -334,12 +401,12 @@ public sealed class BrainMlService
 
     private static double Entropy(double[] probs)
     {
-        if (probs.Length == 0) return 0;
+        if (probs.Length <= 1) return 0;
         double sum = 0;
         for (var i = 0; i < probs.Length; i++)
         {
-            var p = Math.Clamp(probs[i], 1e-6, 1.0);
-            sum -= p * Math.Log(p);
+            var p = probs[i];
+            if (p > 0) sum -= p * Math.Log(p);
         }
         return sum / Math.Log(probs.Length);
     }
@@ -388,7 +455,7 @@ public sealed class BrainMlService
             if (q[i] > max) max = q[i];
         }
         if (double.IsNegativeInfinity(max))
-            return q.Length == 0 ? 0 : q.Max();
+            return 0; // No legal next action: no bootstrap value.
         return max;
     }
 
@@ -456,7 +523,7 @@ public sealed class BrainMlService
         }
     }
 
-    private sealed record CheckpointMeta(long TrainSteps, string WeightsPath);
+    private sealed record CheckpointMeta(long TrainSteps, string WeightsPath, int InputDim = 0, int ActionCount = 0, int Seed = 1337, double LearningRate = 0.0005);
 
     private sealed class ExperienceBuffer
     {

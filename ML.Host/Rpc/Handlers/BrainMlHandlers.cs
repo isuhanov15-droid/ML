@@ -36,6 +36,11 @@ public sealed class BrainMlHandlers
         return Task.FromResult<object?>(response);
     }
 
+    public Task<object?> ResetAsync(RpcRequest req)
+    {
+        return Task.FromResult<object?>(_service.Reset(Deserialize<MlResetRequest>(req)));
+    }
+
     public Task<object?> LoadAsync(RpcRequest req)
     {
         var request = Deserialize<MlCheckpointRequest>(req);
@@ -45,7 +50,7 @@ public sealed class BrainMlHandlers
 
     public Task<object?> PingAsync(RpcRequest req)
     {
-        return Task.FromResult<object?>(new { status = "ok" });
+        return Task.FromResult<object?>(new { status = "ok", instanceId = _service.InstanceId });
     }
 
     public Task<object?> StatusAsync(RpcRequest req)

@@ -10,7 +10,10 @@ public sealed record MlInferRequest(
     int? Seed,
     int? InputDim,
     int? ActionCount
-);
+)
+{
+    public double? LearningRate { get; init; }
+}
 
 public sealed record MlInferResponse(
     bool Ok,
@@ -20,7 +23,7 @@ public sealed record MlInferResponse(
     float[]? Probabilities,
     double Entropy,
     double AvgQ
-);
+) { public string? ServerInstance { get; init; } }
 
 public sealed record MlTransitionDto(
     float[] State,
@@ -30,7 +33,11 @@ public sealed record MlTransitionDto(
     bool Done,
     bool[]? ActionMask,
     bool[]? ActionMask2
-);
+)
+{
+    // DeepBrain uses nextActionMask; retain actionMask2 for older clients.
+    public bool[]? NextActionMask { get; init; }
+}
 
 public sealed record MlTrainConfigDto(
     int BufferSize,
@@ -58,7 +65,7 @@ public sealed record MlTrainRequest(
     MlTrainConfigDto? Config,
     int? InputDim,
     int? ActionCount
-);
+) { public string? ExpectedInstanceId { get; init; } }
 
 public sealed record MlTrainResponse(
     bool Ok,
@@ -73,7 +80,7 @@ public sealed record MlTrainResponse(
     int BufferSize = 0
 );
 
-public sealed record MlCheckpointRequest(string Path);
+public sealed record MlCheckpointRequest(string Path) { public string? ExpectedInstanceId { get; init; } }
 
 public sealed record MlCheckpointResponse(bool Ok, string? Meta);
 
@@ -86,3 +93,5 @@ public sealed record MlStatusResponse(
     bool HasCore,
     string? LastError
 );
+
+public sealed record MlResetRequest(int Seed, double LearningRate);
