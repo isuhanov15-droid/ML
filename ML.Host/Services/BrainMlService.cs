@@ -6,7 +6,7 @@ using ML.Shared.Protocol;
 
 namespace ML.Host.Services;
 
-public sealed class BrainMlService
+public sealed partial class BrainMlService
 {
     private readonly object _lock = new();
     private readonly string _instanceId = Guid.NewGuid().ToString("N");
@@ -193,97 +193,6 @@ public sealed class BrainMlService
         );
     }
 
-    public MlCheckpointResponse Save(MlCheckpointRequest req)
-    {
-        try
-        {
-            lock (_lock)
-            {
-                if (req.ExpectedInstanceId is not null && req.ExpectedInstanceId != _instanceId)
-                    return new MlCheckpointResponse(false, "ML.Host instance changed");
-                if (string.IsNullOrWhiteSpace(req.Path))
-                    return new MlCheckpointResponse(false, "path empty");
-                var dir = Path.GetDirectoryName(req.Path);
-                if (!string.IsNullOrWhiteSpace(dir))
-                    Directory.CreateDirectory(dir);
-                if (_net is null) return new MlCheckpointResponse(false, "model not initialized");
-                // Commit metadata only after a complete immutable generation exists.
-                var weightsPath = Path.GetFullPath(req.Path + ".weights-" + Guid.NewGuid().ToString("N") + ".net");
-                string? previousWeights = null;
-                if (File.Exists(req.Path))
-                {
-                    try { previousWeights = System.Text.Json.JsonSerializer.Deserialize<CheckpointMeta>(File.ReadAllText(req.Path),
-                        new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true })?.WeightsPath; }
-                    catch { /* Preserve an unreadable old generation for diagnosis. */ }
-                }
-                ML.Core.Serialization.ModelStore.SaveToFile(weightsPath, _net);
-                using (var file = new FileStream(weightsPath, FileMode.Open, FileAccess.ReadWrite)) file.Flush(true);
-                var meta = new { trainSteps = _trainSteps, weightsPath, inputDim = _inputDim, actionCount = _actionCount, seed = _seed, learningRate = _lr, resumeMode = "weights-only" };
-                var json = System.Text.Json.JsonSerializer.Serialize(meta);
-                File.WriteAllText(req.Path + ".tmp", json);
-                using (var file = new FileStream(req.Path + ".tmp", FileMode.Open, FileAccess.ReadWrite)) file.Flush(true);
-                File.Move(req.Path + ".tmp", req.Path, true);
-                if (previousWeights is not null &&
-                    previousWeights.StartsWith(Path.GetFullPath(req.Path) + ".weights-", StringComparison.Ordinal))
-                { try { File.Delete(previousWeights); } catch { } }
-                return new MlCheckpointResponse(true, json);
-            }
-        }
-        catch (Exception ex)
-        {
-            _lastError = ex.Message;
-            return new MlCheckpointResponse(false, ex.Message);
-        }
-    }
-
-    public MlCheckpointResponse Load(MlCheckpointRequest req)
-    {
-        try
-        {
-            lock (_lock)
-            {
-                if (string.IsNullOrWhiteSpace(req.Path) || !File.Exists(req.Path))
-                    return new MlCheckpointResponse(false, "path missing");
-                try
-                {
-                    var json = File.ReadAllText(req.Path);
-                    var meta = System.Text.Json.JsonSerializer.Deserialize<CheckpointMeta>(
-                        json,
-                        new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true });
-                    if (meta is not null && !string.IsNullOrWhiteSpace(meta.WeightsPath) && File.Exists(meta.WeightsPath))
-                    {
-                        var loaded = ML.Core.Serialization.ModelStore.LoadFromFile(meta.WeightsPath);
-                        var target = ML.Core.Serialization.ModelStore.LoadFromFile(meta.WeightsPath);
-                        _net = loaded;
-                        _targetNet = target;
-                        _inputDim = loaded.Layers.OfType<LinearLayer>().First().InputSize;
-                        _actionCount = loaded.Layers.OfType<LinearLayer>().Last().OutputSize;
-                        _seed = meta.Seed;
-                        _lr = meta.LearningRate > 0 ? meta.LearningRate : 0.0005;
-                        _buffer = new ExperienceBuffer(1024);
-                        _lastLoss = 0;
-                        _lastError = null;
-                        _optimizer = new AdamOptimizer(_lr == 0 ? 0.0005 : _lr);
-                        _trainSteps = meta.TrainSteps;
-                        return new MlCheckpointResponse(true, json);
-                    }
-                }
-                catch (Exception ex)
-                {
-                    _lastError = ex.Message;
-                    return new MlCheckpointResponse(false, ex.Message);
-                }
-
-                return new MlCheckpointResponse(false, "load failed");
-            }
-        }
-        catch (Exception ex)
-        {
-            _lastError = ex.Message;
-            return new MlCheckpointResponse(false, ex.Message);
-        }
-    }
-
     private void EnsureModel(int inputDim, int actionCount, int seed, double lr)
     {
         // Checkpoints created before v1.1 did not store dimensions.  Bind the
@@ -319,7 +228,7 @@ public sealed class BrainMlService
     {
         var cap = Math.Max(1024, capacity);
         if (_buffer.Capacity != cap)
-            _buffer = new ExperienceBuffer(cap);
+            _buffer = _buffer.Resize(cap);
     }
 
     private double[] PredictQ(float[] state)
@@ -523,7 +432,6 @@ public sealed class BrainMlService
         }
     }
 
-    private sealed record CheckpointMeta(long TrainSteps, string WeightsPath, int InputDim = 0, int ActionCount = 0, int Seed = 1337, double LearningRate = 0.0005);
 
     private sealed class ExperienceBuffer
     {
@@ -538,6 +446,27 @@ public sealed class BrainMlService
         {
             if (capacity <= 0) throw new ArgumentException("capacity must be > 0", nameof(capacity));
             _buffer = new Transition[capacity];
+        }
+
+        public ReplaySnapshot Snapshot(int inputDim, int actionCount) =>
+            new(1, inputDim, actionCount, Capacity, Count, _index, _buffer.Take(_count).ToArray());
+
+        public static ExperienceBuffer Restore(ReplaySnapshot snapshot)
+        {
+            var buffer = new ExperienceBuffer(snapshot.Capacity);
+            Array.Copy(snapshot.Entries, buffer._buffer, snapshot.Count);
+            buffer._count = snapshot.Count;
+            buffer._index = snapshot.NextIndex;
+            return buffer;
+        }
+
+        public ExperienceBuffer Resize(int capacity)
+        {
+            var result = new ExperienceBuffer(capacity);
+            var start = _count == Capacity ? _index : 0;
+            for (var i = Math.Max(0, _count - capacity); i < _count; i++)
+                result.Add(_buffer[(start + i) % Capacity]);
+            return result;
         }
 
         public void Add(Transition transition)
